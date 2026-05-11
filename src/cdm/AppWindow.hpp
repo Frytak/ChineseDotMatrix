@@ -1,11 +1,12 @@
-#ifndef APP_WINDOW_H
-#define APP_WINDOW_H
+#pragma once
 
 #include <QWidget>
 #include <QPushButton>
 #include <QListWidget>
 #include <QVBoxLayout>
-#include "../lib/lib.hpp"
+#include "../lib/DotMatrix.hpp"
+#include "ViewModels/DevicesViewModel.hpp"
+#include "Views/DevicesView.hpp"
 
 class AppWindow : public QWidget {
     Q_OBJECT
@@ -15,21 +16,18 @@ public:
 
 private slots:
     void onScanButtonClicked();
-    void onDeviceFound(const QString& deviceName);
     void onRotate0ButtonClicked();
     void onRotate1ButtonClicked();
+    void testButtonClicked();
 
 private:
     // D-Bus connection
     std::shared_ptr<sdbus::IConnection> conn;
 
-    // DotMatrix device (if connected)
-    std::optional<DotMatrix> matrix;
-
-    QPushButton *scanButton;
-    QListWidget *deviceList;
-    QPushButton *rotate0Button;
-    QPushButton *rotate1Button;
+    DevicesViewModel* devicesViewModel;
+    QPushButton* scanButton;
+    QPushButton* rotate0Button;
+    QPushButton* rotate1Button;
+    QPushButton* testButton;
+    DevicesView* devicesView;
 };
-
-#endif

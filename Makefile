@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -std=c++23 -Wall -Wextra
+CXXFLAGS := -g -std=c++23 -Wall -Wextra
 MOC := moc
 
 QT_MODULES := Qt6Core Qt6Widgets Qt6Bluetooth
@@ -13,14 +13,14 @@ BLE_LDFLAGS  := $(shell pkg-config --libs $(BLE_MODULES))
 CXXFLAGS += $(QT_CXXFLAGS) $(BLE_CXXFLAGS)
 LDFLAGS += $(QT_LDFLAGS) $(BLE_LDFLAGS)
 
-LIB_SRC := $(wildcard src/lib/*.cpp)
+LIB_SRC := $(shell find src/lib -name "*.cpp" -type f)
 LIB_OBJ := $(LIB_SRC:src/lib/%.cpp=build/lib/%.o)
 LIB_MOC_HDR := $(shell find src/lib -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
 LIB_MOC_SRC := $(LIB_MOC_HDR:src/lib/%.hpp=build/lib/moc_%.cpp)
 LIB_MOC_OBJ := $(LIB_MOC_SRC:.cpp=.o)
 LIB_TARGET := build/libcdm.so
 
-APP_SRC := $(wildcard src/cdm/*.cpp)
+APP_SRC := $(shell find src/cdm -name "*.cpp" -type f)
 APP_OBJ := $(APP_SRC:src/cdm/%.cpp=build/cdm/%.o)
 APP_MOC_HDR := $(shell find src/cdm -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
 APP_MOC_SRC := $(APP_MOC_HDR:src/cdm/%.hpp=build/cdm/moc_%.cpp)
@@ -30,25 +30,26 @@ APP_TARGET := cdm
 .PHONY: app lib clean
 
 app $(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(LIB_TARGET)
-	$(CXX) $(APP_OBJ) $(APP_MOC_OBJ) -o $(APP_TARGET) -Lbuild -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/build'
+	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) -o $(APP_TARGET) -Lbuild -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/build'
 
-lib $(LIB_TARGET): $(LIB_OBJ) $(LIB_MOC_OBJ) | build/lib
+lib $(LIB_TARGET): $(LIB_OBJ) $(LIB_MOC_OBJ)
 	$(CXX) -shared $^ -o $(LIB_TARGET) $(LDFLAGS)
 
-build/lib/%.o: src/lib/%.cpp | build/lib
+build/lib/%.o: src/lib/%.cpp
+	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
 
-build/cdm/%.o: src/cdm/%.cpp $(APP_MOC_SRC) | build/cdm
+build/cdm/%.o: src/cdm/%.cpp $(APP_MOC_SRC)
+	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/cdm/moc_%.o: build/cdm/moc_%.cpp | build/cdm
+build/cdm/moc_%.o: build/cdm/moc_%.cpp
+	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/cdm/moc_%.cpp: src/cdm/%.hpp | build/cdm
+build/cdm/moc_%.cpp: src/cdm/%.hpp
+	mkdir -p $(dir $@)
 	$(MOC) $(QT_CXXFLAGS) $< -o $@
-
-build/lib build/cdm:
-	mkdir -p $@
 
 clean:
 	rm -r build $(APP_TARGET)
