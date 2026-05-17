@@ -1,55 +1,86 @@
-CXX := g++
-CXXFLAGS := -g -std=c++23 -Wall -Wextra
-MOC := moc
+BUILD_TYPE ?= debug
+BUILD_DIR  := build/$(BUILD_TYPE)
 
-QT_MODULES := Qt6Core Qt6Widgets Qt6Bluetooth
-QT_CXXFLAGS := $(shell pkg-config --cflags $(QT_MODULES))
-QT_LDFLAGS  := $(shell pkg-config --libs $(QT_MODULES))
+CXX      := g++
+MOC      := moc
+WARNINGS := -Werror -Wall -Wextra -Wconversion -Wsign-conversion -pedantic-errors
+CXXFLAGS := -std=c++23 $(WARNINGS)
 
-BLE_MODULES := sdbus-c++ bluez
-BLE_CXXFLAGS := $(shell pkg-config --cflags $(BLE_MODULES))
+# Apply specific flags based on build type
+ifeq ($(BUILD_TYPE),release)
+    CXXFLAGS += -O3 -DNDEBUG
+else
+    CXXFLAGS += -U_FORTIFY_SOURCE -Og -g
+endif
+
+# Dependencies
+QT_MODULES   := Qt6Core Qt6Widgets
+QT_MOC_FLAGS := $(shell pkg-config --cflags $(QT_MODULES))
+QT_CXXFLAGS  := $(patsubst -I%,-isystem %,$(QT_MOC_FLAGS))
+QT_LDFLAGS   := $(shell pkg-config --libs $(QT_MODULES))
+
+BLE_MODULES  := sdbus-c++ bluez
+BLE_CXXFLAGS := $(patsubst -I%,-isystem %,$(shell pkg-config --cflags $(BLE_MODULES)))
 BLE_LDFLAGS  := $(shell pkg-config --libs $(BLE_MODULES))
 
 CXXFLAGS += $(QT_CXXFLAGS) $(BLE_CXXFLAGS)
-LDFLAGS += $(QT_LDFLAGS) $(BLE_LDFLAGS)
+LDFLAGS  += $(QT_LDFLAGS) $(BLE_LDFLAGS)
 
-LIB_SRC := $(shell find src/lib -name "*.cpp" -type f)
-LIB_OBJ := $(LIB_SRC:src/lib/%.cpp=build/lib/%.o)
-LIB_MOC_HDR := $(shell find src/lib -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
-LIB_MOC_SRC := $(LIB_MOC_HDR:src/lib/%.hpp=build/lib/moc_%.cpp)
-LIB_MOC_OBJ := $(LIB_MOC_SRC:.cpp=.o)
-LIB_TARGET := build/libcdm.so
+# Shared library
+LIB_DIR     := src/lib
+LIB_BUILD   := $(BUILD_DIR)/lib
+LIB_TARGET  := $(BUILD_DIR)/libcdm.so
 
-APP_SRC := $(shell find src/cdm -name "*.cpp" -type f)
-APP_OBJ := $(APP_SRC:src/cdm/%.cpp=build/cdm/%.o)
-APP_MOC_HDR := $(shell find src/cdm -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
-APP_MOC_SRC := $(APP_MOC_HDR:src/cdm/%.hpp=build/cdm/moc_%.cpp)
+LIB_SRC     := $(shell find $(LIB_DIR) -name "*.cpp" -type f)
+LIB_OBJ     := $(LIB_SRC:$(LIB_DIR)/%.cpp=$(LIB_BUILD)/%.o)
+
+# Application
+APP_DIR     := src/cdm
+APP_BUILD   := $(BUILD_DIR)/cdm
+APP_TARGET  := cdm
+
+APP_SRC     := $(shell find $(APP_DIR) -name "*.cpp" -type f)
+APP_OBJ     := $(APP_SRC:$(APP_DIR)/%.cpp=$(APP_BUILD)/%.o)
+APP_MOC_HDR := $(shell find $(APP_DIR) -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
+APP_MOC_SRC := $(APP_MOC_HDR:$(APP_DIR)/%.hpp=$(APP_BUILD)/moc_%.cpp)
 APP_MOC_OBJ := $(APP_MOC_SRC:.cpp=.o)
-APP_TARGET := cdm
 
-.PHONY: app lib clean
+# Build Targets
+.PHONY: app clean debug release lib
 
-app $(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(LIB_TARGET)
-	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) -o $(APP_TARGET) -Lbuild -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/build'
+app: $(APP_TARGET)
 
-lib $(LIB_TARGET): $(LIB_OBJ) $(LIB_MOC_OBJ)
-	$(CXX) -shared $^ -o $(LIB_TARGET) $(LDFLAGS)
+debug:
+	@$(MAKE) BUILD_TYPE=debug app
 
-build/lib/%.o: src/lib/%.cpp
-	mkdir -p $(dir $@)
+release:
+	@$(MAKE) BUILD_TYPE=release app
+
+lib: $(LIB_TARGET)
+
+
+
+$(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(LIB_TARGET)
+	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) -o $@ -L$(BUILD_DIR) -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)'
+
+$(APP_BUILD)/%.o: $(APP_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(APP_BUILD)/moc_%.o: $(APP_BUILD)/moc_%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(APP_BUILD)/moc_%.cpp: $(APP_DIR)/%.hpp
+	@mkdir -p $(dir $@)
+	$(MOC) $(QT_MOC_FLAGS) $< -o $@
+
+$(LIB_TARGET): $(LIB_OBJ)
+	$(CXX) -shared $^ -o $@ $(LDFLAGS)
+
+$(LIB_BUILD)/%.o: $(LIB_DIR)/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
-
-build/cdm/%.o: src/cdm/%.cpp $(APP_MOC_SRC)
-	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-build/cdm/moc_%.o: build/cdm/moc_%.cpp
-	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-build/cdm/moc_%.cpp: src/cdm/%.hpp
-	mkdir -p $(dir $@)
-	$(MOC) $(QT_CXXFLAGS) $< -o $@
 
 clean:
 	rm -r build $(APP_TARGET)

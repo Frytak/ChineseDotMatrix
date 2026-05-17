@@ -1,8 +1,12 @@
 #include "AppWindow.hpp"
 #include <QApplication>
 
+Q_DECLARE_METATYPE(std::uint8_t)
+
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
+
+    qRegisterMetaType<std::uint8_t>("std::uint8_t");
 
     app.setStyleSheet(
         "AppWindow {"

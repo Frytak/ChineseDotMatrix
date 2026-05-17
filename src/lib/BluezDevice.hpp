@@ -17,6 +17,7 @@ constexpr auto PROPERTIES_IFACE     = "org.freedesktop.DBus.Properties";
 class DotMatrix;
 
 using InterfacesAddedSignal = std::tuple<sdbus::ObjectPath, std::map<std::string, std::map<std::string, sdbus::Variant>>>;
+using Characteristics = std::map<std::string, std::shared_ptr<sdbus::IProxy>, std::less<>>;
 
 // Objects returned by GetManagedObjects
 using ManagedObjects = std::map<
@@ -82,7 +83,7 @@ namespace bluez {
         std::shared_ptr<sdbus::IProxy> device;
 
         // Cached characteristic proxies, keyed by UUID
-        std::map<std::string, std::shared_ptr<sdbus::IProxy>, std::less<>> characteristics;
+        Characteristics characteristics;
 
 
 
@@ -92,8 +93,11 @@ namespace bluez {
     public:
         BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath object_path);
         BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device);
-        BluezDeviceProxy(bluez::BluezDeviceProxy& device);
-        BluezDeviceProxy(const bluez::BluezDeviceProxy& device);
+
+        BluezDeviceProxy(const BluezDeviceProxy&) = default;
+        BluezDeviceProxy& operator=(const BluezDeviceProxy&) = default;
+        BluezDeviceProxy(BluezDeviceProxy&&) noexcept = default;
+        BluezDeviceProxy& operator=(BluezDeviceProxy&&) noexcept = default;
 
         void connect();
         void disconnect();

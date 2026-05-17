@@ -1,5 +1,6 @@
 #include "BluezDevice.hpp"
 #include <iostream>
+#include <map>
 #include <optional>
 #include <sdbus-c++/Types.h>
 
@@ -43,13 +44,11 @@ namespace bluez {
     BluezDeviceProxy::BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath object_path)
         : conn(conn),
           object_path(object_path),
-          device(sdbus::createProxy(*conn, BLUEZ_SERVICE, object_path))
+          device(sdbus::createProxy(*conn, BLUEZ_SERVICE, object_path)),
+          characteristics(Characteristics())
     { }
 
     BluezDeviceProxy::BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device) : BluezDeviceProxy(conn, device.getObjectPath()) {}
-
-    BluezDeviceProxy::BluezDeviceProxy(bluez::BluezDeviceProxy& device) = default;
-    BluezDeviceProxy::BluezDeviceProxy(const bluez::BluezDeviceProxy& device) = default;
 
     std::shared_ptr<sdbus::IProxy>& BluezDeviceProxy::getCharacteristic(std::string_view uuid) {
         if (characteristics.contains(uuid)) {

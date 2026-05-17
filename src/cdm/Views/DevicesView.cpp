@@ -1,28 +1,29 @@
-#include "DevicesView.hpp"
-#include "DeviceView.hpp"
-#include "qboxlayout.h"
-#include "qlistwidget.h"
+#include <QBoxLayout>
+#include <QAbstractItemModel>
 
-DevicesView::DevicesView(DevicesViewModel* view_model, QWidget *parent) : QWidget(parent), _view_model(view_model) {
-    deviceList = new QListWidget(this);
+#include "DevicesView.hpp"
+#include "DeviceItemDelegate.hpp"
+
+DevicesView::DevicesView(DevicesModel* view_model, QWidget *parent) : QWidget(parent), view_model(view_model) {
+    deviceList = new QListView(this);
+    deviceList->setModel(view_model);
+    deviceList->setItemDelegate(new DeviceItemDelegate(this));
+    deviceList->setMouseTracking(true);
+    deviceList->setStyleSheet(R"(
+        QListView {
+            color: white;
+            background-color: #1A1A1A;
+            border: none;
+        }
+    )");
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(deviceList);
     setLayout(layout);
 
-    connect(_view_model, &DevicesViewModel::deviceAdded, _view_model, [this](DeviceViewModel* item) {
-        deviceList->clear();
-        for (const auto& device : _view_model->discoveredDevices()) {
-            auto list_item = new QListWidgetItem(deviceList);
-            DeviceView* device_widget = new DeviceView(device, deviceList);
-            deviceList->addItem(list_item);
-            list_item->setSizeHint(device_widget->sizeHint());
-            deviceList->setItemWidget(list_item, device_widget);
-        }
-    });
+    connect(deviceList, &QListView::doubleClicked, this, [view_model](const QModelIndex& index) {
+        if (!index.isValid()) { return; }
 
-    connect(deviceList, &QListWidget::itemDoubleClicked, _view_model, [this](QListWidgetItem* item) {
-        auto item_widget = static_cast<DeviceView*>(deviceList->itemWidget(item));
-        _view_model->connectToDevice(item_widget->_view_model);
+        view_model->manager->connectToDevice(view_model->manager->discoveredDevices()[static_cast<std::size_t>(index.row())]);
     });
 }

@@ -1,16 +1,15 @@
-#include "qlistwidget.h"
-#include "qtmetamacros.h"
-#include "qwidget.h"
-#include "../ViewModels/DevicesViewModel.hpp"
+#include <QWidget>
+#include <QListView>
+
+#include "../Models/DevicesModel.hpp"
 
 class DevicesView : public QWidget {
     Q_OBJECT
 
 public:
-    explicit DevicesView(DevicesViewModel* view_model, QWidget *parent = nullptr);
+    explicit DevicesView(DevicesModel* view_model, QWidget *parent = nullptr);
 
 private:
-    DevicesViewModel* _view_model;
-
-    QListWidget *deviceList;
+    DevicesModel* view_model;
+    QListView* deviceList;
 };

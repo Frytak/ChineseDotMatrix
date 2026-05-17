@@ -62,11 +62,9 @@ std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnecti
     return {};
 }
 
-DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath device_path) : DotMatrix(bluez::BluezDeviceProxy(conn, device_path)) { };
+DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath device_path) : DotMatrix(bluez::BluezDeviceProxy(conn, device_path)) {};
 DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device) : DotMatrix(bluez::BluezDeviceProxy(conn, device)) {};
-DotMatrix::DotMatrix(bluez::BluezDeviceProxy device) : conn(device.conn), device(device) {
-    device.connect();
-};
+DotMatrix::DotMatrix(bluez::BluezDeviceProxy device) : conn(device.conn), device(device) {};
 
 std::string DotMatrix::getObjectPath() const {
     return device.getObjectPath();
@@ -92,26 +90,32 @@ std::optional<std::map<std::uint16_t, sdbus::Variant>> DotMatrix::getManufacture
     return device.getManufacturerData();
 }
 
-void DotMatrix::setRotate180(bool rotate) {
-    device.write(UUID_WRITE_CHAR, {0x05, 0x00, 0x06, 0x80, rotate});
+void DotMatrix::connect() {
+    device.connect();
+}
+
+void DotMatrix::disconnect() {
+    device.disconnect();
+}
+
+void DotMatrix::setRotate180(bool rotated) {
+    device.write(UUID_WRITE_CHAR, {0x05, 0x00, 0x06, 0x80, rotated});
+}
+
+void DotMatrix::setDrawingMode() {
+    device.write(UUID_WRITE_CHAR, {0x05, 0x00, 0x04, 0x01, 0x01});
+}
+
+void DotMatrix::setPixel(std::uint8_t x, std::uint8_t y, Color color) {
+    device.write(UUID_WRITE_CHAR, {0x0a, 0x00, 0x05, 0x01, 0x00, color.r, color.g, color.b, x, y});
 }
 
 void DotMatrix::test() {
-    // Change mode to drawing
-    device.write(UUID_WRITE_CHAR, {0x05, 0x00, 0x04, 0x01, 0x01});
-
-    // 0x0a, 0x00, 0x05, 0x01, 0x00 - draw
-    // 0xff, 0x00, 0x00 - RGB color
-    // 0x07, 0x11 - (x, y) position
+    setDrawingMode();
     
-    std::thread([&]() {
-        std::vector<std::uint8_t> bytes{0x0a, 0x00, 0x05, 0x01, 0x00};
-        for (std::uint8_t y = 0; y < 32; y++) {
-            for (std::uint8_t x = 0; x < 32; x++) {
-                std::vector<std::uint8_t> bytes_copy = bytes;
-                bytes_copy.insert(bytes_copy.end(), {0x00, 0xff, 0x00, x, y});
-                device.write(UUID_WRITE_CHAR, bytes_copy);
-            }
+    for (std::uint8_t y = 0; y < 32; y++) {
+        for (std::uint8_t x = 0; x < 32; x++) {
+            setPixel(x, y, {static_cast<uint8_t>(x * 8), static_cast<uint8_t>(y * 8), 128});
         }
-    }).detach();
+    }
 }

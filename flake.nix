@@ -34,6 +34,7 @@
 
                         packages = with pkgs; [
                             gcc15
+                            gdb
                             pkg-config
                             gnumake
 
