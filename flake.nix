@@ -44,7 +44,7 @@
 
                             # UI
                             qt6.qtbase
-                            qt6.qtconnectivity
+                            qt6.qtsvg
 
                             # For working with the apk
                             apktool

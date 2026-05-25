@@ -3,6 +3,7 @@ BUILD_DIR  := build/$(BUILD_TYPE)
 
 CXX      := g++
 MOC      := moc
+RCC      := rcc
 WARNINGS := -Werror -Wall -Wextra -Wconversion -Wsign-conversion -pedantic-errors
 CXXFLAGS := -std=c++23 $(WARNINGS)
 
@@ -14,7 +15,7 @@ else
 endif
 
 # Dependencies
-QT_MODULES   := Qt6Core Qt6Widgets
+QT_MODULES   := Qt6Core Qt6Widgets Qt6Svg Qt6SvgWidgets
 QT_MOC_FLAGS := $(shell pkg-config --cflags $(QT_MODULES))
 QT_CXXFLAGS  := $(patsubst -I%,-isystem %,$(QT_MOC_FLAGS))
 QT_LDFLAGS   := $(shell pkg-config --libs $(QT_MODULES))
@@ -45,6 +46,10 @@ APP_MOC_HDR := $(shell find $(APP_DIR) -name "*.hpp" -type f -exec grep -l "Q_OB
 APP_MOC_SRC := $(APP_MOC_HDR:$(APP_DIR)/%.hpp=$(APP_BUILD)/moc_%.cpp)
 APP_MOC_OBJ := $(APP_MOC_SRC:.cpp=.o)
 
+APP_QRC     := $(shell find $(APP_DIR) -name "*.qrc" -type f)
+APP_RCC_SRC := $(APP_QRC:$(APP_DIR)/%.qrc=$(APP_BUILD)/qrc_%.cpp)
+APP_RCC_OBJ := $(APP_RCC_SRC:.cpp=.o)
+
 # Build Targets
 .PHONY: app clean debug release lib
 
@@ -60,8 +65,8 @@ lib: $(LIB_TARGET)
 
 
 
-$(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(LIB_TARGET)
-	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) -o $@ -L$(BUILD_DIR) -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)'
+$(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) $(LIB_TARGET)
+	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) -o $@ -L$(BUILD_DIR) -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)'
 
 $(APP_BUILD)/%.o: $(APP_DIR)/%.cpp
 	@mkdir -p $(dir $@)
@@ -74,6 +79,14 @@ $(APP_BUILD)/moc_%.o: $(APP_BUILD)/moc_%.cpp
 $(APP_BUILD)/moc_%.cpp: $(APP_DIR)/%.hpp
 	@mkdir -p $(dir $@)
 	$(MOC) $(QT_MOC_FLAGS) $< -o $@
+
+$(APP_BUILD)/qrc_%.o: $(APP_BUILD)/qrc_%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(APP_BUILD)/qrc_%.cpp: $(APP_DIR)/%.qrc
+	@mkdir -p $(dir $@)
+	$(RCC) $< -o $@
 
 $(LIB_TARGET): $(LIB_OBJ)
 	$(CXX) -shared $^ -o $@ $(LDFLAGS)

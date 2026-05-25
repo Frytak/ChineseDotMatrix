@@ -109,13 +109,3 @@ void DotMatrix::setDrawingMode() {
 void DotMatrix::setPixel(std::uint8_t x, std::uint8_t y, Color color) {
     device.write(UUID_WRITE_CHAR, {0x0a, 0x00, 0x05, 0x01, 0x00, color.r, color.g, color.b, x, y});
 }
-
-void DotMatrix::test() {
-    setDrawingMode();
-    
-    for (std::uint8_t y = 0; y < 32; y++) {
-        for (std::uint8_t x = 0; x < 32; x++) {
-            setPixel(x, y, {static_cast<uint8_t>(x * 8), static_cast<uint8_t>(y * 8), 128});
-        }
-    }
-}

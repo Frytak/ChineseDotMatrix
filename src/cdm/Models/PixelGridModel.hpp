@@ -11,7 +11,7 @@ class PixelGridModel : public QAbstractTableModel {
 public:
     static constexpr std::uint8_t ROWS = 32;
     static constexpr std::uint8_t COLS = 32;
-    static constexpr int PIXEL_SIZE = 16;
+    static constexpr int PIXEL_SIZE = 20;
 
     enum PixelRoles {
         ColorRole = Qt::UserRole + 1
@@ -23,8 +23,11 @@ public:
     int columnCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 
-    QColor currentColor() const;
-    void setCurrentColor(const QColor& c);
+    QColor primaryColor() const;
+    void setPrimaryColor(const QColor& c);
+
+    QColor secondaryColor() const;
+    void setSecondaryColor(const QColor& c);
 
     const QColor& getPixel(const QPoint& point);
     const QColor& getPixel(std::uint8_t x, std::uint8_t y);
@@ -38,8 +41,9 @@ signals:
     void cleared();
 
 private:
-    QVector<QColor> m_grid;
-    QColor m_currentColor = Qt::black;
+    QVector<QColor> grid;
+    QColor primary_color = Qt::black;
+    QColor secondary_color = Qt::black;
 
     std::uint16_t idx(const QPoint& point) const;
     std::uint16_t idx(std::uint8_t x, std::uint8_t y) const;

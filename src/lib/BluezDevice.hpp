@@ -17,6 +17,7 @@ constexpr auto PROPERTIES_IFACE     = "org.freedesktop.DBus.Properties";
 class DotMatrix;
 
 using InterfacesAddedSignal = std::tuple<sdbus::ObjectPath, std::map<std::string, std::map<std::string, sdbus::Variant>>>;
+using Properties = std::map<std::string, sdbus::Variant>;
 using Characteristics = std::map<std::string, std::shared_ptr<sdbus::IProxy>, std::less<>>;
 
 // Objects returned by GetManagedObjects
@@ -26,11 +27,17 @@ using ManagedObjects = std::map<
 >;
 
 namespace bluez {
+    std::vector<std::string> extract_properties_keys(const Properties& properties);
+
     enum AddressType {
         PUBLIC,
         RANDOM,
     };
 
+    // Abstract class representing the properties of a device you can get.
+    //
+    // Documentation for the bluez device properties can be found at
+    // https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst#properties
     class BluezDeviceGetInterface {
     public:
         virtual ~BluezDeviceGetInterface() = default;
@@ -40,9 +47,14 @@ namespace bluez {
         virtual AddressType getAddressType() const = 0;
         virtual std::optional<std::string> getName() const = 0;
         virtual std::string getAlias() const = 0;
+
         virtual std::optional<std::map<std::uint16_t, sdbus::Variant>> getManufacturerData() const = 0;
     };
 
+    // Abstract class representing the properties of a device you can set.
+    //
+    // Documentation for the bluez device properties can be found at
+    // https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst#properties
     class BluezDeviceSetInterface {
     public:
         virtual ~BluezDeviceSetInterface() = default;
@@ -50,8 +62,18 @@ namespace bluez {
         virtual void setAlias(std::string alias) = 0;
     };
 
+    // Abstract class representing the properties of a device you can get or set.
+    //
+    // Documentation for the properties can be found at
+    // https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst#properties
     class BluezDeviceInterface : public BluezDeviceGetInterface, public BluezDeviceSetInterface { };
 
+    // Represents a snapshot of a Bluetooth device with properties, the data is
+    // not updated when the device properties change. This is useful for storing
+    // device information without needing to maintain a D-Bus connection.
+    //
+    // Documentation for the bluez device properties can be found at
+    // https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst#properties
     class BluezDevice : public BluezDeviceGetInterface {
     private:
         // Object path of the device
@@ -61,7 +83,12 @@ namespace bluez {
         std::map<std::string, sdbus::Variant> properties;
 
     public:
-        BluezDevice(sdbus::ObjectPath object_path, std::map<std::string, sdbus::Variant> properties);
+        static constexpr auto REQUIRED_PROPERTIES = {"Address", "AddressType", "Name", "Alias"}; // TODO: "ManufacturerData"
+
+        BluezDevice(sdbus::ObjectPath object_path, Properties properties);
+
+        static std::vector<std::string> return_missing_properties(const std::vector<std::string>& properties);
+        static std::vector<std::string> return_missing_properties(const Properties& properties);
 
         std::string getObjectPath() const override;
         std::string getAddress() const override;
@@ -71,6 +98,14 @@ namespace bluez {
         std::optional<std::map<std::uint16_t, sdbus::Variant>> getManufacturerData() const override;
     };
 
+    // Represents a Bluetooth device with properties that can be read and
+    // written, this class maintains a D-Bus connection and proxies to the
+    // device, so the properties are always up to date. This is useful for
+    // interacting with devices and performing operations like connecting,
+    // reading/writing characteristics, etc.
+    //
+    // Documentation for the bluez device properties can be found at
+    // https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst#properties
     class BluezDeviceProxy : public BluezDeviceInterface {
     private:
         // D-Bus connection
@@ -99,7 +134,10 @@ namespace bluez {
         BluezDeviceProxy(BluezDeviceProxy&&) noexcept = default;
         BluezDeviceProxy& operator=(BluezDeviceProxy&&) noexcept = default;
 
+        // Establish a connection to the device, this is required before you can read/write
         void connect();
+
+        // Disconnect from the device
         void disconnect();
 
         // Write data to a characteristic by UUID
@@ -119,4 +157,26 @@ namespace bluez {
 
         friend DotMatrix;
     };
+
+    namespace bluez_device {
+        class MissingPropertiesError : public std::logic_error {
+        private:
+            const std::vector<std::string> provided_properties;
+            const std::vector<std::string> missing_properties;
+
+            static std::string build_message(const std::vector<std::string>& missing_properties);
+
+            MissingPropertiesError(const std::vector<std::string>& provided_propertiesd, const std::vector<std::string>& missing_properties);
+
+        public:
+            explicit MissingPropertiesError(const std::vector<std::string>& provided_properties);
+            explicit MissingPropertiesError(const Properties& provided_properties);
+        };
+
+        class InvalidPropertyValueError : public std::logic_error {
+        private:
+            const std::string property_name;
+            const sdbus::Variant provided_value;
+        };
+    }
 }

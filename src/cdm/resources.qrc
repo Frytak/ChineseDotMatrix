@@ -1,0 +1,10 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/">
+    <file>../../assets/devicesBackground.svg</file>
+    <file>../../assets/connectedDeviceBackground.svg</file>
+    <file>../../assets/toolsBackground.svg</file>
+    <file>../../assets/delete.svg</file>
+    <file>../../assets/rotate0.svg</file>
+    <file>../../assets/rotate180.svg</file>
+</qresource>
+</RCC>

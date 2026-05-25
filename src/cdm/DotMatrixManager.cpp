@@ -9,6 +9,11 @@ DotMatrixManager::DotMatrixManager(std::shared_ptr<sdbus::IConnection> conn, QOb
     : QObject(parent)
     , conn(conn)
 {
+    connect(this, &DotMatrixManager::connectedDeviceChanged, this, [this](const std::optional<DotMatrix>& connected_dot_matrix) {
+        emit nameChanged(connected_dot_matrix ? QString::fromStdString(connected_dot_matrix->getAlias()) : QString());
+        emit connectionChanged(connected_dot_matrix.has_value());
+    });
+
     draw_thread = QThread::create([this]() {
         while (true) {
             std::unique_lock<std::mutex> lock(draw_queue_mutex);
@@ -60,6 +65,10 @@ void DotMatrixManager::startScan() {
                 addDevice(device);
             });
         });
+
+        QMetaObject::invokeMethod(this, [this]() {
+            emit isScanningChanged(false);
+        });
     });
 
     scan_thread->setParent(this);
@@ -83,31 +92,34 @@ void DotMatrixManager::addDevice(bluez::BluezDevice device) {
 void DotMatrixManager::connectToDevice(bluez::BluezDevice device) {
     if (connected_dot_matrix.has_value()) { return; }
 
-    connected_dot_matrix = DotMatrix(conn, device);
-    connected_dot_matrix->connect();
+    QThread::create([this, device]() {
+        DotMatrix dot_matrix(conn, device);
+        dot_matrix.connect();
+
+        QMetaObject::invokeMethod(this, [this, dot_matrix]() {
+            connected_dot_matrix = dot_matrix;
+            emit connectedDeviceChanged(connected_dot_matrix);
+        });
+    })->start();
 }
 
 void DotMatrixManager::disconnectFromDevice() {
     if (!connected_dot_matrix.has_value()) { return; }
 
-    connected_dot_matrix->disconnect();
-    connected_dot_matrix = std::nullopt;
+    QThread::create([this]() {
+        connected_dot_matrix->disconnect();
 
-    emit connectedDeviceChanged(connected_dot_matrix);
+        QMetaObject::invokeMethod(this, [this]() {
+            connected_dot_matrix = std::nullopt;
+            emit connectedDeviceChanged(connected_dot_matrix);
+        });
+    })->start();
 }
 
 void DotMatrixManager::setRotate180(bool rotate) {
     if (!connected_dot_matrix.has_value()) { return; }
         
     connected_dot_matrix->setRotate180(rotate);
-}
-
-void DotMatrixManager::test() {
-    if (!connected_dot_matrix.has_value()) { return; }
-        
-    QThread::create([this]() {
-        connected_dot_matrix->test();
-    })->start();
 }
 
 void DotMatrixManager::setPixel(std::uint8_t x, std::uint8_t y, const QColor& color) {

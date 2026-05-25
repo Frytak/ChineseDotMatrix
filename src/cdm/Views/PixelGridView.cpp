@@ -19,6 +19,7 @@ std::uint8_t PixelCell::getColumns() const { return columns; }
 PixelGridView::PixelGridView(PixelGridModel* model, QWidget* parent)
     : QGraphicsView(parent)
     , m_model(model)
+    , held_buttons({})
 {
     m_scene = new QGraphicsScene(this);
     setScene(m_scene);
@@ -77,34 +78,36 @@ void PixelGridView::paintCell(std::uint8_t x, std::uint8_t y, const QColor& colo
 }
 
 void PixelGridView::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton) {
-        m_painting = true; m_erasing = false;
-    } else if (event->button() == Qt::RightButton) {
-        m_painting = false; m_erasing = true;
-    } else return;
+    QColor color;
+    held_buttons.push_back(event->button());
+    switch (held_buttons.back()) {
+        case Qt::LeftButton: color = m_model->primaryColor(); break;
+        case Qt::RightButton: color = m_model->secondaryColor(); break;
+        default: return;
+    }
 
     QPoint cell = viewToCell(event->pos());
-    QColor color = m_erasing ? Qt::black : m_model->currentColor();
     if (m_model->getPixel(cell) == color) return;
 
     paintCell(cell, color);
 }
 
 void PixelGridView::mouseMoveEvent(QMouseEvent* event) {
-    if (!m_painting && !m_erasing) return;
+    if (held_buttons.empty()) { return; }
+
+    QColor color;
+    switch (held_buttons.back()) {
+        case Qt::LeftButton: color = m_model->primaryColor(); break;
+        case Qt::RightButton: color = m_model->secondaryColor(); break;
+        default: return;
+    }
 
     QPoint cell = viewToCell(event->pos());
-    QColor color = m_erasing ? Qt::black : m_model->currentColor();
     if (m_model->getPixel(cell) == color) return;
 
     paintCell(cell, color);
 }
 
 void PixelGridView::mouseReleaseEvent(QMouseEvent* event) {
-    const bool leftDone  = (event->button() == Qt::LeftButton  && m_painting);
-    const bool rightDone = (event->button() == Qt::RightButton && m_erasing);
-    if (!leftDone && !rightDone) return;
-
-    m_painting = false;
-    m_erasing  = false;
+    held_buttons.erase(std::remove(held_buttons.begin(), held_buttons.end(), event->button()), held_buttons.end());
 }

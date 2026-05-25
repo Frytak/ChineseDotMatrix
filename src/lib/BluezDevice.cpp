@@ -1,13 +1,46 @@
 #include "BluezDevice.hpp"
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <sdbus-c++/Types.h>
 
 namespace bluez {
+    std::vector<std::string> extract_properties_keys(const Properties& properties) {
+        std::vector<std::string> keys;
+        keys.reserve(properties.size()); 
+        
+        for (const auto& [key, value] : properties) { 
+            keys.push_back(key);
+        }
+        
+        return keys;
+    }
+
     BluezDevice::BluezDevice(sdbus::ObjectPath object_path, std::map<std::string, sdbus::Variant> properties) : object_path(object_path), properties(properties) {
-        // TODO: throw if the device doesn't contain required properties
+        std::vector<std::string> missing_properties = BluezDevice::return_missing_properties(properties); 
+        if (!missing_properties.empty()) {
+            throw bluez_device::MissingPropertiesError(properties);
+        }
+
+        // TODO: Validate property values
     };
+
+    std::vector<std::string> BluezDevice::return_missing_properties(const std::vector<std::string>& properties) {
+        std::vector<std::string> missing_properties;
+
+        for (const auto& required_property : BluezDevice::REQUIRED_PROPERTIES) {
+            if (std::find(properties.begin(), properties.end(), required_property) == properties.end()) {
+                missing_properties.push_back(required_property);
+            }
+        }
+
+        return missing_properties;
+    }
+
+    std::vector<std::string> BluezDevice::return_missing_properties(const Properties& properties) {
+        return return_missing_properties(extract_properties_keys(properties));
+    }
 
     std::string BluezDevice::getObjectPath() const {
         return object_path;
@@ -95,8 +128,7 @@ namespace bluez {
     }
 
     void BluezDeviceProxy::disconnect() {
-        // TODO
-        throw "Not yet implemented";
+        device->callMethod("Disconnect").onInterface(DEVICE_IFACE);
     }
 
     void BluezDeviceProxy::write(std::string_view uuid, std::vector<uint8_t> data) {
@@ -185,5 +217,36 @@ namespace bluez {
         device->callMethod("Set")
               .onInterface(PROPERTIES_IFACE)
               .withArguments(DEVICE_IFACE, "Alias", alias);
+    }
+
+    namespace bluez_device {
+        std::string MissingPropertiesError::build_message(const std::vector<std::string>& missing_properties) {
+            if (missing_properties.empty()) {
+                return "Missing required properties: (none)";
+            }
+            
+            return "Missing required properties: " + std::accumulate(
+                std::next(missing_properties.begin()), 
+                missing_properties.end(), 
+                missing_properties.front(),
+                [](const std::string& a, const std::string& b) {
+                    return a + ", " + b;
+                }
+            );
+        }
+
+        MissingPropertiesError::MissingPropertiesError(const std::vector<std::string>& provided_properties, const std::vector<std::string>& missing_properties)
+            : std::logic_error(build_message(missing_properties))
+            , provided_properties(provided_properties)
+            , missing_properties(missing_properties)
+        { }
+
+        MissingPropertiesError::MissingPropertiesError(const std::vector<std::string>& provided_properties)
+            : MissingPropertiesError(provided_properties, BluezDevice::return_missing_properties(provided_properties))
+        { }
+
+        MissingPropertiesError::MissingPropertiesError(const Properties& provided_properties)
+            : MissingPropertiesError(extract_properties_keys(provided_properties))
+        { }
     }
 }

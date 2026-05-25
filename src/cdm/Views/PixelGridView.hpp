@@ -5,6 +5,7 @@
 #include <QPoint>
 #include <cstdint>
 #include "../Models/PixelGridModel.hpp"
+#include "qnamespace.h"
 
 class PixelCell : public QGraphicsRectItem {
 public:
@@ -34,8 +35,7 @@ private:
     QGraphicsScene* m_scene;
     PixelCell* m_cells[PixelGridModel::ROWS][PixelGridModel::COLS];
 
-    bool m_painting = false;
-    bool m_erasing  = false;
+    std::vector<Qt::MouseButton> held_buttons;
 
     QPoint viewToCell(const QPoint& viewPos) const;
     void paintCell(const QPoint& pixel, const QColor& color);

@@ -52,5 +52,4 @@ public:
     * Position(x,y) : 0x07, 0x11
     */
     void setPixel(std::uint8_t x, std::uint8_t y, Color color);
-    void test();
 };

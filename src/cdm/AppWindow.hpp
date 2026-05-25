@@ -15,6 +15,8 @@ class AppWindow : public QWidget {
 
 public:
     explicit AppWindow(QWidget *parent = nullptr);
+    static constexpr auto backgrond_color = QColor(0x1A, 0x1A, 0x1A);
+    static constexpr auto text_color = QColor(0xFF, 0xFF, 0xFF);
 
 private slots:
     void onScanButtonClicked();
@@ -22,7 +24,6 @@ private slots:
     void onRotate1ButtonClicked();
     void onPickColorButtonClicked();
     void onClearButtonClicked();
-    void testButtonClicked();
 
 private:
     // D-Bus connection
@@ -38,7 +39,6 @@ private:
     QPushButton* scanButton;
     QPushButton* rotate0Button;
     QPushButton* rotate1Button;
-    QPushButton* testButton;
     QPushButton* colorButton;
     QPushButton* clearButton;
 

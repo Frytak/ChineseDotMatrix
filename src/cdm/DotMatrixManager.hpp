@@ -31,7 +31,6 @@ public slots:
     Q_INVOKABLE void disconnectFromDevice();
 
     Q_INVOKABLE void setRotate180(bool rotate);
-    Q_INVOKABLE void test();
     Q_INVOKABLE void setPixel(std::uint8_t x, std::uint8_t y, const QColor& pixel);
     Q_INVOKABLE void setDrawingMode();
 

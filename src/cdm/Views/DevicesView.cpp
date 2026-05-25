@@ -1,21 +1,24 @@
 #include <QBoxLayout>
 #include <QAbstractItemModel>
 
+#include "../theme.hpp"
 #include "DevicesView.hpp"
 #include "DeviceItemDelegate.hpp"
 
 DevicesView::DevicesView(DevicesModel* view_model, QWidget *parent) : QWidget(parent), view_model(view_model) {
-    deviceList = new QListView(this);
+    deviceList = new QListView;
     deviceList->setModel(view_model);
     deviceList->setItemDelegate(new DeviceItemDelegate(this));
     deviceList->setMouseTracking(true);
-    deviceList->setStyleSheet(R"(
+    deviceList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    deviceList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    deviceList->setStyleSheet(QString(R"(
         QListView {
-            color: white;
-            background-color: #1A1A1A;
+            color: %1;
+            background-color: transparent;
             border: none;
         }
-    )");
+    )").arg(Theme::text.name()));
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(deviceList);
