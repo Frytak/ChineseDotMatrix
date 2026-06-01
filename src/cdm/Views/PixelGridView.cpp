@@ -60,8 +60,8 @@ void PixelGridView::onDataChanged(const QModelIndex& topLeft, const QModelIndex&
 QPoint PixelGridView::viewToCell(const QPoint& vp) const {
     QPointF sp = mapToScene(vp);
     return {
-        static_cast<int>(sp.x()) / PixelGridModel::PIXEL_SIZE,
-        static_cast<int>(sp.y()) / PixelGridModel::PIXEL_SIZE
+        std::min(std::max(static_cast<int>(sp.x()) / PixelGridModel::PIXEL_SIZE, 0), static_cast<int>(PixelGridModel::ROWS - 1)),
+        std::min(std::max(static_cast<int>(sp.y()) / PixelGridModel::PIXEL_SIZE, 0), static_cast<int>(PixelGridModel::COLS - 1))
     };
 }
 

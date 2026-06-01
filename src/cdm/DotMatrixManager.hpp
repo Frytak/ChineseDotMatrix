@@ -3,6 +3,7 @@
 #include <QString>
 #include <QThread>
 #include <QColor>
+#include <exception>
 #include <optional>
 #include <queue>
 #include <span>
@@ -29,6 +30,7 @@ public slots:
     Q_INVOKABLE void addDevice(bluez::BluezDevice device);
     Q_INVOKABLE void connectToDevice(bluez::BluezDevice device);
     Q_INVOKABLE void disconnectFromDevice();
+    Q_INVOKABLE void clearDiscoveredDevices();
 
     Q_INVOKABLE void setRotate180(bool rotate);
     Q_INVOKABLE void setPixel(std::uint8_t x, std::uint8_t y, const QColor& pixel);
@@ -37,9 +39,12 @@ public slots:
 signals:
     void nameChanged(const QString& new_name);
     void connectionChanged(bool connected);
+    void disconnecting();
     void connectedDeviceChanged(const std::optional<DotMatrix>& connected_dot_matrix);
+    void connectionError(const std::exception_ptr err);
     void isScanningChanged(bool scanning);
     void deviceDiscovered(const bluez::BluezDevice& device);
+    void discoveredDevicesCleared();
 
 private:
     std::shared_ptr<sdbus::IConnection> conn;

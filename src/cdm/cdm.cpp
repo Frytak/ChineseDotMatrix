@@ -1,12 +1,28 @@
 #include "AppWindow.hpp"
-#include "qtresource.h"
 #include "theme.hpp"
 #include <QApplication>
+#include <chrono>
+#include <ctime>
+#include "../lib/Logger.hpp"
 
 Q_DECLARE_METATYPE(std::uint8_t)
 
 int main(int argc, char *argv[]) {
     qRegisterMetaType<std::uint8_t>("std::uint8_t");
+
+    cdm::setLogCallback([](cdm::LogLevel level, const std::string& msg) {
+        auto timestamp = std::chrono::system_clock::now();
+        auto format = [](std::string level, std::chrono::time_point<std::chrono::system_clock> timestamp) {
+            return std::format("[\x1b[1mChineseDotMatrix\x1b[0m][{}][{:%Y-%m-%d %H:%M:%S}]", level, timestamp);
+        };
+
+        switch (level) {
+            case cdm::LogLevel::Debug:   qDebug()    << format("\x1b[34mDEBG\x1b[0m", timestamp).c_str() << msg.c_str(); break;
+            case cdm::LogLevel::Info:    qInfo()     << format("\x1b[32mINFO\x1b[0m", timestamp).c_str() << msg.c_str(); break;
+            case cdm::LogLevel::Warning: qWarning()  << format("\x1b[33mWARN\x1b[0m", timestamp).c_str() << msg.c_str(); break;
+            case cdm::LogLevel::Error:   qCritical() << format("\x1b[31mERRO\x1b[0m", timestamp).c_str() << msg.c_str(); break;
+        }
+    });
 
     QApplication app(argc, argv);
 

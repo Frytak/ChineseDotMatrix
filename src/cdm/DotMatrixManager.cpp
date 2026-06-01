@@ -1,8 +1,12 @@
 #include "DotMatrixManager.hpp"
+#include "qdebug.h"
+#include "qlogging.h"
 #include "qthread.h"
 #include <QColor>
+#include <exception>
 #include <optional>
 #include <queue>
+#include <sdbus-c++/Error.h>
 #include <tuple>
 
 DotMatrixManager::DotMatrixManager(std::shared_ptr<sdbus::IConnection> conn, QObject *parent)
@@ -73,7 +77,10 @@ void DotMatrixManager::startScan() {
 
     scan_thread->setParent(this);
     // TODO: handle scan finished
-    //connect(_scan_thread, &QThread::finished, _scan_thread, &DevicesViewModel::onScanFinished);
+    connect(scan_thread, &QThread::finished, scan_thread, [&]() {
+        delete scan_thread;
+        scan_thread = nullptr;
+    });
     scan_thread->start();
 
     emit isScanningChanged(true);
@@ -90,14 +97,31 @@ void DotMatrixManager::addDevice(bluez::BluezDevice device) {
 }
 
 void DotMatrixManager::connectToDevice(bluez::BluezDevice device) {
-    if (connected_dot_matrix.has_value()) { return; }
-
     QThread::create([this, device]() {
-        DotMatrix dot_matrix(conn, device);
-        dot_matrix.connect();
+        if (connected_dot_matrix.has_value()) {
+            if (device.getObjectPath() == connected_dot_matrix->getObjectPath()) { return; }
 
-        QMetaObject::invokeMethod(this, [this, dot_matrix]() {
-            connected_dot_matrix = dot_matrix;
+            emit disconnecting();
+            connected_dot_matrix->disconnect();
+            connected_dot_matrix.reset();
+
+            QMetaObject::invokeMethod(this, [this]() {
+                emit connectedDeviceChanged(connected_dot_matrix);
+            });
+        }
+
+        DotMatrix dot_matrix{conn, device};
+        try {
+            dot_matrix.connect();
+        } catch (const sdbus::Error& err) {
+            QMetaObject::invokeMethod(this, [this, err]() {
+                emit connectionError(std::current_exception());
+            });
+            //return;
+        }
+
+        QMetaObject::invokeMethod(this, [this, dot_matrix = std::move(dot_matrix)]() mutable {
+            connected_dot_matrix = std::move(dot_matrix);
             emit connectedDeviceChanged(connected_dot_matrix);
         });
     })->start();
@@ -106,14 +130,22 @@ void DotMatrixManager::connectToDevice(bluez::BluezDevice device) {
 void DotMatrixManager::disconnectFromDevice() {
     if (!connected_dot_matrix.has_value()) { return; }
 
+    emit disconnecting();
     QThread::create([this]() {
+        // TODO: Handle disconnect error
         connected_dot_matrix->disconnect();
+        connected_dot_matrix.reset();
 
         QMetaObject::invokeMethod(this, [this]() {
-            connected_dot_matrix = std::nullopt;
             emit connectedDeviceChanged(connected_dot_matrix);
         });
     })->start();
+}
+
+
+void DotMatrixManager::clearDiscoveredDevices() {
+    devices.clear();
+    emit discoveredDevicesCleared();
 }
 
 void DotMatrixManager::setRotate180(bool rotate) {

@@ -7,9 +7,6 @@
 #include <sdbus-c++/Types.h>
 #include <sdbus-c++/sdbus-c++.h>
 
-constexpr auto UUID_WRITE_CHAR = "0000fa02-0000-1000-8000-00805f9b34fb";
-constexpr auto UUID_READ_CHAR  = "00002902-0000-1000-8000-00805f9b34fb";
-
 typedef struct {
     std::uint8_t r;
     std::uint8_t g;
@@ -24,6 +21,11 @@ private:
     bluez::BluezDeviceProxy device;
 
 public:
+    static constexpr auto UUID_WRITE_CHAR = "0000fa02-0000-1000-8000-00805f9b34fb";
+    static constexpr auto UUID_READ_CHAR  = "00002902-0000-1000-8000-00805f9b34fb";
+    static constexpr auto COMPANY_ID      = {0x52, 0x54};
+    static constexpr auto PAYLOAD         = {0x00, 0x70, 0x03, 0x04, 0x0F, 0x00, 0x01, 0x04};
+
     DotMatrix(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath device_path);
     DotMatrix(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device);
     DotMatrix(bluez::BluezDeviceProxy device);
@@ -31,12 +33,14 @@ public:
     // Scan for DotMatrix devices
     static std::vector<bluez::BluezDevice> scan(std::shared_ptr<sdbus::IConnection> conn, std::function<void (bluez::BluezDevice device)> callback = [](auto){}, std::chrono::milliseconds duration = std::chrono::seconds(5));
 
-    std::string getObjectPath() const;
-    std::string getAddress() const;
-    bluez::AddressType getAddressType() const;
-    std::optional<std::string> getName() const;
-    std::string getAlias() const;
-    std::optional<std::map<std::uint16_t, sdbus::Variant>> getManufacturerData() const;
+    std::string getObjectPath() const override;
+    std::string getAddress() const override;
+    bluez::AddressType getAddressType() const override;
+    std::optional<std::string> getName() const override;
+    std::string getAlias() const override;
+    bool getConnected() const override;
+    std::optional<std::vector<std::string>> getUUIDs() const override;
+    std::optional<std::map<std::uint16_t, sdbus::Variant>> getManufacturerData() const override;
 
     void connect();
     void disconnect();

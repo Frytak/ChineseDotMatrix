@@ -5,7 +5,7 @@ CXX      := g++
 MOC      := moc
 RCC      := rcc
 WARNINGS := -Werror -Wall -Wextra -Wconversion -Wsign-conversion -pedantic-errors
-CXXFLAGS := -std=c++23 $(WARNINGS)
+CXXFLAGS := -std=c++23 -MMD -MP $(WARNINGS)
 
 # Apply specific flags based on build type
 ifeq ($(BUILD_TYPE),release)
@@ -24,31 +24,33 @@ BLE_MODULES  := sdbus-c++ bluez
 BLE_CXXFLAGS := $(patsubst -I%,-isystem %,$(shell pkg-config --cflags $(BLE_MODULES)))
 BLE_LDFLAGS  := $(shell pkg-config --libs $(BLE_MODULES))
 
-CXXFLAGS += $(QT_CXXFLAGS) $(BLE_CXXFLAGS)
-LDFLAGS  += $(QT_LDFLAGS) $(BLE_LDFLAGS)
+CXXFLAGS     += $(QT_CXXFLAGS) $(BLE_CXXFLAGS)
+LDFLAGS      += $(QT_LDFLAGS) $(BLE_LDFLAGS)
 
 # Shared library
-LIB_DIR     := src/lib
-LIB_BUILD   := $(BUILD_DIR)/lib
-LIB_TARGET  := $(BUILD_DIR)/libcdm.so
+LIB_DIR      := src/lib
+LIB_BUILD    := $(BUILD_DIR)/lib
+LIB_TARGET   := $(BUILD_DIR)/libcdm.so
 
-LIB_SRC     := $(shell find $(LIB_DIR) -name "*.cpp" -type f)
-LIB_OBJ     := $(LIB_SRC:$(LIB_DIR)/%.cpp=$(LIB_BUILD)/%.o)
+LIB_SRC      := $(shell find $(LIB_DIR) -name "*.cpp" -type f)
+LIB_OBJ      := $(LIB_SRC:$(LIB_DIR)/%.cpp=$(LIB_BUILD)/%.o)
+LIB_DEP      := $(LIB_OBJ:.o=.d)
 
 # Application
-APP_DIR     := src/cdm
-APP_BUILD   := $(BUILD_DIR)/cdm
-APP_TARGET  := cdm
+APP_DIR      := src/cdm
+APP_BUILD    := $(BUILD_DIR)/cdm
+APP_TARGET   := cdm
 
-APP_SRC     := $(shell find $(APP_DIR) -name "*.cpp" -type f)
-APP_OBJ     := $(APP_SRC:$(APP_DIR)/%.cpp=$(APP_BUILD)/%.o)
-APP_MOC_HDR := $(shell find $(APP_DIR) -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
-APP_MOC_SRC := $(APP_MOC_HDR:$(APP_DIR)/%.hpp=$(APP_BUILD)/moc_%.cpp)
-APP_MOC_OBJ := $(APP_MOC_SRC:.cpp=.o)
+APP_SRC      := $(shell find $(APP_DIR) -name "*.cpp" -type f)
+APP_OBJ      := $(APP_SRC:$(APP_DIR)/%.cpp=$(APP_BUILD)/%.o)
+APP_DEP      := $(APP_OBJ:.o=.d)
+APP_MOC_HDR  := $(shell find $(APP_DIR) -name "*.hpp" -type f -exec grep -l "Q_OBJECT" {} + 2>/dev/null)
+APP_MOC_SRC  := $(APP_MOC_HDR:$(APP_DIR)/%.hpp=$(APP_BUILD)/moc_%.cpp)
+APP_MOC_OBJ  := $(APP_MOC_SRC:.cpp=.o)
 
-APP_QRC     := $(shell find $(APP_DIR) -name "*.qrc" -type f)
-APP_RCC_SRC := $(APP_QRC:$(APP_DIR)/%.qrc=$(APP_BUILD)/qrc_%.cpp)
-APP_RCC_OBJ := $(APP_RCC_SRC:.cpp=.o)
+APP_QRC      := $(shell find $(APP_DIR) -name "*.qrc" -type f)
+APP_RCC_SRC  := $(APP_QRC:$(APP_DIR)/%.qrc=$(APP_BUILD)/qrc_%.cpp)
+APP_RCC_OBJ  := $(APP_RCC_SRC:.cpp=.o)
 
 # Build Targets
 .PHONY: app clean debug release lib
@@ -97,3 +99,5 @@ $(LIB_BUILD)/%.o: $(LIB_DIR)/%.cpp
 
 clean:
 	rm -r build $(APP_TARGET)
+
+-include $(LIB_DEP) $(APP_DEP)

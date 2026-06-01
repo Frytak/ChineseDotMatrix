@@ -1,9 +1,12 @@
 #include "BluezDevice.hpp"
-#include <iostream>
+#include <algorithm>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <optional>
+#include <sdbus-c++/Error.h>
 #include <sdbus-c++/Types.h>
+#include "LoggerInternal.hpp"
 
 namespace bluez {
     std::vector<std::string> extract_properties_keys(const Properties& properties) {
@@ -17,13 +20,34 @@ namespace bluez {
         return keys;
     }
 
-    BluezDevice::BluezDevice(sdbus::ObjectPath object_path, std::map<std::string, sdbus::Variant> properties) : object_path(object_path), properties(properties) {
+    BluezDevice::BluezDevice(sdbus::ObjectPath object_path, std::map<std::string, sdbus::Variant> properties) : object_path(object_path) {
+        // Validate required properties
         std::vector<std::string> missing_properties = BluezDevice::return_missing_properties(properties); 
-        if (!missing_properties.empty()) {
-            throw bluez_device::MissingPropertiesError(properties);
-        }
+        if (!missing_properties.empty()) { throw bluez_device::MissingPropertiesError(properties); }
 
-        // TODO: Validate property values
+        // Validate property types
+        BluezDevice::validate_property_type<std::string>(properties, "Address", "s");
+        BluezDevice::validate_property_type<std::string>(properties, "AddressType", "s");
+        BluezDevice::validate_property_type<std::string>(properties, "Name", "s");
+        BluezDevice::validate_property_type<std::string>(properties, "Alias", "s");
+        BluezDevice::validate_property_type<bool>(properties, "Connected", "b");
+        BluezDevice::validate_property_type<std::vector<std::string>>(properties, "UUIDs", "as");
+        BluezDevice::validate_property_type<std::map<std::uint16_t, sdbus::Variant>>(properties, "ManufacturerData", "a{qv}");
+
+        // Validate and assign property values
+        address = properties.at("Address").get<std::string>();
+
+        std::string raw_address_type = properties.at("AddressType").get<std::string>();
+        if (raw_address_type != "public" && raw_address_type != "random") {
+            throw bluez_device::InvalidPropertyValueError("AddressType", properties.at("AddressType"));
+        }
+        address_type = raw_address_type == "public" ? PUBLIC : RANDOM;
+
+        name = properties.contains("Name") ? static_cast<std::optional<std::string>>(properties.at("Name").get<std::string>()) : std::nullopt;
+        alias = properties.at("Alias").get<std::string>();
+        connected = properties.at("Connected").get<bool>();
+        uuids = properties.contains("UUIDs") ? static_cast<std::optional<std::vector<std::string>>>(properties.at("UUIDs").get<std::vector<std::string>>()) : std::nullopt;
+        manufacturer_data = properties.contains("ManufacturerData") ? static_cast<std::optional<std::map<std::uint16_t, sdbus::Variant>>>(properties.at("ManufacturerData").get<std::map<std::uint16_t, sdbus::Variant>>()) : std::nullopt;
     };
 
     std::vector<std::string> BluezDevice::return_missing_properties(const std::vector<std::string>& properties) {
@@ -42,46 +66,57 @@ namespace bluez {
         return return_missing_properties(extract_properties_keys(properties));
     }
 
-    std::string BluezDevice::getObjectPath() const {
-        return object_path;
-    }
-
-    std::string BluezDevice::getAddress() const {
-        return properties.at("Address").get<std::string>();
-    }
-
-    AddressType BluezDevice::getAddressType() const {
-        return properties.at("AddressType").get<std::string>() == "public" ? PUBLIC : RANDOM;
-    }
-
-    std::optional<std::string> BluezDevice::getName() const {
-        if (properties.contains("Name")) {
-            return properties.at("Name").get<std::string>();
+    template <typename T>
+    void BluezDevice::validate_property_type(const Properties& properties, std::string property_name, std::string expected_type) {
+        if (!properties.contains(property_name)) { return; }
+        if (!properties.at(property_name).containsValueOfType<T>()) {
+            throw bluez_device::InvalidPropertyTypeError(property_name, properties.at(property_name).peekValueType(), expected_type);
         }
-        return std::nullopt;
     }
 
-    std::string BluezDevice::getAlias() const {
-        return properties.at("Alias").get<std::string>();
-    }
+    std::string BluezDevice::getObjectPath() const { return object_path; }
+    std::string BluezDevice::getAddress() const { return address; }
+    AddressType BluezDevice::getAddressType() const { return address_type; }
+    std::optional<std::string> BluezDevice::getName() const { return name; }
+    std::string BluezDevice::getAlias() const { return alias; }
+    bool BluezDevice::getConnected() const { return connected; }
+    std::optional<std::vector<std::string>> BluezDevice::getUUIDs() const { return uuids; }
+    std::optional<std::map<std::uint16_t, sdbus::Variant>> BluezDevice::getManufacturerData() const { return manufacturer_data; }
 
-    std::optional<std::map<std::uint16_t, sdbus::Variant>> BluezDevice::getManufacturerData() const {
-        if (properties.contains("ManufacturerData")) {
-            return properties.at("ManufacturerData").get<std::map<std::uint16_t, sdbus::Variant>>();
-        }
-        return std::nullopt;
-    }
+    void BluezDevice::setAlias(std::string alias) { this->alias = alias; }
 
 
 
     BluezDeviceProxy::BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath object_path)
-        : conn(conn),
-          object_path(object_path),
-          device(sdbus::createProxy(*conn, BLUEZ_SERVICE, object_path)),
-          characteristics(Characteristics())
-    { }
+        : conn(conn)
+        , object_path(object_path)
+        , device(sdbus::createProxy(*conn, BLUEZ_SERVICE, object_path))
+        , characteristics(Characteristics())
+        , connection_state(std::make_shared<ConnectionState>())
+    {
+        registerConnectionListener();
+        device->finishRegistration();
+    }
 
     BluezDeviceProxy::BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device) : BluezDeviceProxy(conn, device.getObjectPath()) {}
+
+    BluezDeviceProxy::~BluezDeviceProxy() noexcept {
+        if (!device) {
+            CDM_DEBUG("Destroying BluezDeviceProxy.");
+            return;
+        }
+
+        if (!getConnected()) {
+            CDM_DEBUG("Destroying BluezDeviceProxy (`{}`).", object_path.c_str());
+            return;
+        }
+
+        try {
+            disconnect();
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to disconnect from device (`{}`) during BluezDeviceProxy destruction. {}", object_path.c_str(), err.what());
+        }
+    }
 
     std::shared_ptr<sdbus::IProxy>& BluezDeviceProxy::getCharacteristic(std::string_view uuid) {
         if (characteristics.contains(uuid)) {
@@ -108,36 +143,93 @@ namespace bluez {
         throw "Characteristic UUID not found: " + std::string(uuid);
     }
 
+    void BluezDeviceProxy::registerConnectionListener() {
+        device->uponSignal("PropertiesChanged")
+            .onInterface(PROPERTIES_IFACE)
+            .call([connection_state = connection_state](const std::string& interface_name, const std::map<std::string, sdbus::Variant>& changed_properties, const std::vector<std::string>& /*invalidated_properties*/) {
+                if (interface_name != DEVICE_IFACE) { return; }
+
+                auto it = changed_properties.find("Connected");
+                if (it != changed_properties.end()) {
+                    bool is_connected = it->second.get<bool>();
+
+                    std::lock_guard<std::mutex> lock(connection_state->is_connected_mutex);
+                    connection_state->is_connected = is_connected;
+                    
+                    if (is_connected) {
+                        connection_state->is_connected_cv.notify_all();
+                    }
+                }
+            });
+    }
+
     void BluezDeviceProxy::connect() {
-        device->callMethod("Connect").onInterface(DEVICE_IFACE);
+        CDM_INFO("Connecting to `{}`.", object_path.c_str());
 
-        // TODO: Use PropertiesChanged signal
-        for (int i = 0; i < 30; i++) {
-            sdbus::Variant resolved;
-            device->callMethod("Get")
-                   .onInterface(PROPERTIES_IFACE)
-                   .withArguments(DEVICE_IFACE, std::string("ServicesResolved"))
-                   .storeResultsTo(resolved);
+        sdbus::Variant resolved;
+        device->callMethod("Get")
+              .onInterface(PROPERTIES_IFACE)
+              .withArguments(DEVICE_IFACE, std::string("ServicesResolved"))
+              .storeResultsTo(resolved);
 
-            if (resolved.get<bool>()) {
-                std::cout << "GATT ready\n";
-                break;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        {
+            std::lock_guard<std::mutex> lock(connection_state->is_connected_mutex);
+            connection_state->is_connected = resolved.get<bool>();
+        }
+
+        if (connection_state->is_connected) {
+            CDM_INFO("Device (`{}`) is already connected to and GATT services are resolved.", object_path.c_str());
+            return;
+        }
+
+        try {
+            device->callMethod("Connect").onInterface(DEVICE_IFACE);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to connect to device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+
+        std::unique_lock<std::mutex> lock(connection_state->is_connected_mutex);
+        bool success = connection_state->is_connected_cv.wait_for(lock, std::chrono::seconds(5), [this]() {
+            return connection_state->is_connected;
+        });
+
+        if (!success) {
+            CDM_WARN("Timeout waiting for device (`{}`) to connect and resolve GATT services.", object_path.c_str());
+
+            try {
+                device->callMethod("Disconnect").onInterface(DEVICE_IFACE);
+            } catch (...) {}
+
+            connection_state->is_connected = false;
+        } else {
+            CDM_INFO("Successfully connected to device (`{}`) and resolved GATT services.", object_path.c_str());
         }
     }
 
     void BluezDeviceProxy::disconnect() {
-        device->callMethod("Disconnect").onInterface(DEVICE_IFACE);
+        CDM_INFO("Disconnecting from device (`{}`).", object_path.c_str());
+        try {
+            device->callMethod("Disconnect").onInterface(DEVICE_IFACE);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to disconnect from device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+        CDM_INFO("Successfully disconnected from device (`{}`).", object_path.c_str());
     }
 
     void BluezDeviceProxy::write(std::string_view uuid, std::vector<uint8_t> data) {
         auto characteristic = sdbus::createProxy(*conn, BLUEZ_SERVICE, getCharacteristic(uuid)->getObjectPath());
         std::map<std::string, sdbus::Variant> options;
 
-        characteristic->callMethod("WriteValue")
-                       .onInterface(GATT_CHAR_IFACE)
-                       .withArguments(data, options);
+        try {
+            characteristic->callMethod("WriteValue")
+                           .onInterface(GATT_CHAR_IFACE)
+                           .withArguments(data, options);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to write to characteristic `{}` on device `{}`. {}", uuid.data(), object_path.c_str(), err.what());
+            throw err;
+        }
     }
 
     std::vector<uint8_t> BluezDeviceProxy::read(std::string_view uuid) {
@@ -145,10 +237,16 @@ namespace bluez {
         std::map<std::string, sdbus::Variant> options;
 
         std::vector<uint8_t> data;
-        characteristic->callMethod("ReadValue")
-                       .onInterface(GATT_CHAR_IFACE)
-                       .withArguments(options)
-                       .storeResultsTo(data);
+
+        try {
+            characteristic->callMethod("ReadValue")
+                           .onInterface(GATT_CHAR_IFACE)
+                           .withArguments(options)
+                           .storeResultsTo(data);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to read from characteristic `{}` on device `{}`. {}", uuid.data(), object_path.c_str(), err.what());
+            throw err;
+        }
 
         return data;
     }
@@ -158,65 +256,167 @@ namespace bluez {
     }
 
     std::string BluezDeviceProxy::getAddress() const {
+        CDM_DEBUG("Getting the `Address` property for device (`{}`).", object_path.c_str());
         sdbus::Variant var;
-        device->callMethod("Get")
-              .onInterface(PROPERTIES_IFACE)
-              .withArguments(DEVICE_IFACE, "Address")
-              .storeResultsTo(var);
 
-        std::string address = var.get<std::string>();
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "Address")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to get `Address` property for device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+
+        auto address = var.get<std::string>();
+        CDM_DEBUG("Got the `Address` property (`{}`) for device (`{}`).", address, object_path.c_str());
         return address;
     }
 
     AddressType BluezDeviceProxy::getAddressType() const {
+        CDM_DEBUG("Getting the `AddressType` property for device (`{}`).", object_path.c_str());
         sdbus::Variant var;
-        device->callMethod("Get")
-              .onInterface(PROPERTIES_IFACE)
-              .withArguments(DEVICE_IFACE, "AddressType")
-              .storeResultsTo(var);
 
-        std::string address_type = var.get<std::string>();
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "AddressType")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to get `AddressType` property for device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+
+        auto address_type = var.get<std::string>();
+        CDM_DEBUG("Got the `AddressType` property (`{}`) for device (`{}`).", address_type, object_path.c_str());
         return address_type == "public" ? PUBLIC : RANDOM;
     }
 
-    // TODO: Check if exists
     std::optional<std::string> BluezDeviceProxy::getName() const {
+        CDM_DEBUG("Getting the `Name` property for device (`{}`).", object_path.c_str());
         sdbus::Variant var;
-        device->callMethod("Get")
-              .onInterface(PROPERTIES_IFACE)
-              .withArguments(DEVICE_IFACE, "Name")
-              .storeResultsTo(var);
 
-        std::string name = var.get<std::string>();
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "Name")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            if (err.getName() == "org.freedesktop.DBus.Error.UnknownProperty") {
+                CDM_WARN("Device (`{}`) does not have a `Name` property.", object_path.c_str());
+                return std::nullopt;
+            } else {
+                CDM_ERR("Failed to get `Name` property for device (`{}`). {}", object_path.c_str(), err.what());
+                throw err;
+            }
+        }
+
+        auto name = var.get<std::string>();
+        CDM_DEBUG("Got the `Name` property (`{}`) for device (`{}`).", name, object_path.c_str());
         return name;
     }
 
     std::string BluezDeviceProxy::getAlias() const {
+        CDM_DEBUG("Getting the `Alias` property for device (`{}`).", object_path.c_str());
         sdbus::Variant var;
-        device->callMethod("Get")
-              .onInterface(PROPERTIES_IFACE)
-              .withArguments(DEVICE_IFACE, "Alias")
-              .storeResultsTo(var);
 
-        std::string alias = var.get<std::string>();
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "Alias")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to get `Alias` property for device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+
+        auto alias = var.get<std::string>();
+        CDM_DEBUG("Got the `Alias` property (`{}`) for device (`{}`).", alias, object_path.c_str());
         return alias;
     }
 
-    std::optional<std::map<std::uint16_t, sdbus::Variant>> BluezDeviceProxy::getManufacturerData() const {
+    bool BluezDeviceProxy::getConnected() const {
+        CDM_DEBUG("Getting the `Connected` property for device (`{}`).", object_path.c_str());
         sdbus::Variant var;
-        device->callMethod("Get")
-              .onInterface(PROPERTIES_IFACE)
-              .withArguments(DEVICE_IFACE, "ManufacturerData")
-              .storeResultsTo(var);
 
-        std::map<std::uint16_t, sdbus::Variant> manufacturer_data = var.get<std::map<std::uint16_t, sdbus::Variant>>();
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "Connected")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to get `Connected` property for device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+
+        auto connected = var.get<bool>();
+        CDM_DEBUG("Got the `Connected` property (`{}`) for device (`{}`).", connected, object_path.c_str());
+        return connected;
+    }
+
+    std::optional<std::vector<std::string>> BluezDeviceProxy::getUUIDs() const {
+        CDM_DEBUG("Getting the `UUIDs` property for device (`{}`).", object_path.c_str());
+        sdbus::Variant var;
+
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "UUIDs")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            if (err.getName() == "org.freedesktop.DBus.Error.UnknownProperty") {
+                CDM_WARN("Device (`{}`) does not have a `UUIDs` property.", object_path.c_str());
+                return std::nullopt;
+            } else {
+                CDM_ERR("Failed to get `UUIDs` property for device (`{}`). {}", object_path.c_str(), err.what());
+                throw err;
+            }
+        }
+
+        auto uuids = var.get<std::vector<std::string>>();
+        CDM_DEBUG("Got the `UUIDs` property for device (`{}`).", object_path.c_str());
+        return uuids;
+    }
+
+    std::optional<std::map<std::uint16_t, sdbus::Variant>> BluezDeviceProxy::getManufacturerData() const {
+        CDM_DEBUG("Getting the `ManufacturerData` property for device (`{}`).", object_path.c_str());
+        sdbus::Variant var;
+
+        try {
+            device->callMethod("Get")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "ManufacturerData")
+                  .storeResultsTo(var);
+        } catch (const sdbus::Error& err) {
+            if (err.getName() == "org.freedesktop.DBus.Error.UnknownProperty") {
+                CDM_WARN("Device (`{}`) does not have a `ManufacturerData` property.", object_path.c_str());
+                return std::nullopt;
+            } else {
+                CDM_ERR("Failed to get `ManufacturerData` property for device (`{}`). {}", object_path.c_str(), err.what());
+                throw err;
+            }
+        }
+
+        auto manufacturer_data = var.get<std::map<std::uint16_t, sdbus::Variant>>();
+        CDM_DEBUG("Got the `ManufacturerData` property for device (`{}`).", object_path.c_str());
         return manufacturer_data;
+
     }
 
     void BluezDeviceProxy::setAlias(std::string alias) {
-        device->callMethod("Set")
-              .onInterface(PROPERTIES_IFACE)
-              .withArguments(DEVICE_IFACE, "Alias", alias);
+        CDM_DEBUG("Setting the `Alias` property for device (`{}`) to `{}`.", object_path.c_str(), alias);
+
+        try {
+            device->callMethod("Set")
+                  .onInterface(PROPERTIES_IFACE)
+                  .withArguments(DEVICE_IFACE, "Alias", alias);
+        } catch (const sdbus::Error& err) {
+            CDM_ERR("Failed to set `Alias` property for device (`{}`). {}", object_path.c_str(), err.what());
+            throw err;
+        }
+
+        CDM_DEBUG("Set the `Alias` property for device (`{}`) to `{}`.", object_path.c_str(), alias);
     }
 
     namespace bluez_device {
@@ -247,6 +447,19 @@ namespace bluez {
 
         MissingPropertiesError::MissingPropertiesError(const Properties& provided_properties)
             : MissingPropertiesError(extract_properties_keys(provided_properties))
+        { }
+
+
+        InvalidPropertyTypeError::InvalidPropertyTypeError(std::string property_name, std::string expected_type, std::string provided_type)
+            : std::logic_error("Invalid type for property `" + property_name + "`. Expected `" + expected_type + "`, but got `" + provided_type + "`.")
+            , property_name(property_name)
+            , expected_type(expected_type)
+        { }
+
+        InvalidPropertyValueError::InvalidPropertyValueError(std::string property_name, sdbus::Variant provided_value)
+            : std::logic_error("Invalid value for property `" + property_name + "`.")
+            , property_name(property_name)
+            , provided_value(provided_value)
         { }
     }
 }

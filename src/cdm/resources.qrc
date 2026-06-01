@@ -6,5 +6,6 @@
     <file>../../assets/delete.svg</file>
     <file>../../assets/rotate0.svg</file>
     <file>../../assets/rotate180.svg</file>
+    <file>../../assets/link-off.svg</file>
 </qresource>
 </RCC>

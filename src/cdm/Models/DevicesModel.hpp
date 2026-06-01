@@ -22,7 +22,7 @@ public:
 
 private slots:
     void onDeviceDiscovered(const bluez::BluezDevice& device);
-    void onDevicesReset();
+    void onDiscoveredDevicesCleared();
 
 private:
     DotMatrixManager* manager;

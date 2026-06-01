@@ -15,49 +15,50 @@
 #include <QSvgWidget>
 #include <QIconEngine>
 #include <QColorDialog>
+#include "../lib/DBusConnectionManager.hpp"
 
-AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sdbus::createSystemBusConnection())) {
+AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(DBusConnectionManager::getSystemBus()) {
     dot_matrix_manager = new DotMatrixManager(conn, this);
-    devicesModel = new DevicesModel(dot_matrix_manager, this);
-    pixelGridModel = new PixelGridModel(this);
+    devices_model = new DevicesModel(dot_matrix_manager, this);
+    pixel_grid_model = new PixelGridModel(this);
 
     auto image = QImage(64,64, QImage::Format_ARGB32);
     image.fill(0x00000000);
     auto painter = QPainter(&image);
 
-    scanButton = new QPushButton("Start BLE Scan", this);
+    scan_button = new QPushButton("Start BLE Scan", this);
 
-    rotate0Button = new QPushButton(this);
-    rotate0Button->setFixedSize(36, 36);
-    rotate0Button->setToolTip("Right side down");
+    rotate0_button = new QPushButton(this);
+    rotate0_button->setFixedSize(36, 36);
+    rotate0_button->setToolTip("Right side down");
     QSvgRenderer(QString(":/assets/rotate0.svg"), this).render(&painter);
-    rotate0Button->setIcon(QIcon(QPixmap::fromImage(image)));
-    rotate0Button->setIconSize(QSize(24, 24));
+    rotate0_button->setIcon(QIcon(QPixmap::fromImage(image)));
+    rotate0_button->setIconSize(QSize(24, 24));
     image.fill(0x00000000);
 
-    rotate1Button = new QPushButton(this);
-    rotate1Button->setFixedSize(36, 36);
-    rotate1Button->setToolTip("Upside down");
+    rotate1_button = new QPushButton(this);
+    rotate1_button->setFixedSize(36, 36);
+    rotate1_button->setToolTip("Upside down");
     QSvgRenderer(QString(":/assets/rotate180.svg"), this).render(&painter);
-    rotate1Button->setIcon(QIcon(QPixmap::fromImage(image)));
-    rotate1Button->setIconSize(QSize(24, 24));
+    rotate1_button->setIcon(QIcon(QPixmap::fromImage(image)));
+    rotate1_button->setIconSize(QSize(24, 24));
     image.fill(0x00000000);
 
-    clearButton = new QPushButton(this);
-    clearButton->setFixedSize(36, 36);
-    clearButton->setToolTip("Clear");
+    clear_button = new QPushButton(this);
+    clear_button->setFixedSize(36, 36);
+    clear_button->setToolTip("Clear");
     QSvgRenderer(QString(":/assets/delete.svg"), this).render(&painter);
-    clearButton->setIcon(QIcon(QPixmap::fromImage(image)));
-    clearButton->setIconSize(QSize(24, 24));
+    clear_button->setIcon(QIcon(QPixmap::fromImage(image)));
+    clear_button->setIconSize(QSize(24, 24));
 
-    colorButton = new QPushButton("Color", this);
-    colorButton->setFixedSize(36, 36);
+    color_button = new QPushButton("Color", this);
+    color_button->setFixedSize(36, 36);
 
-    devicesView = new DevicesView(devicesModel, this);
-    pixelGridView = new PixelGridView(pixelGridModel, this);
-    pixelGridView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    devices_view = new DevicesView(devices_model, this);
+    pixel_grid_view = new PixelGridView(pixel_grid_model, this);
+    pixel_grid_view->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    updateColorButton(pixelGridModel->primaryColor());
+    updateColorButton(pixel_grid_model->primaryColor());
 
     auto* connectionArea = new QWidget;
     connectionArea->setFixedWidth(300);
@@ -66,8 +67,8 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sd
 
     auto* connectionAreaLayout = new QVBoxLayout(connectionArea);
     connectionAreaLayout->setContentsMargins(20, 20, 20, 20);
-    connectionAreaLayout->addWidget(scanButton);
-    connectionAreaLayout->addWidget(devicesView);
+    connectionAreaLayout->addWidget(scan_button);
+    connectionAreaLayout->addWidget(devices_view);
 
     auto* toolbarArea = new QWidget;
     toolbarArea->setFixedWidth(90);
@@ -76,16 +77,17 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sd
     auto* toolbarAreaLayout = new QVBoxLayout(toolbarArea);
     toolbarAreaLayout->setAlignment(Qt::AlignHCenter);
     toolbarAreaLayout->setContentsMargins(0, 0, 0, 0);
-    toolbarAreaLayout->addWidget(colorButton);
-    toolbarAreaLayout->addWidget(clearButton);
-    toolbarAreaLayout->addWidget(rotate0Button);
-    toolbarAreaLayout->addWidget(rotate1Button);
+    toolbarAreaLayout->addWidget(color_button);
+    toolbarAreaLayout->addWidget(clear_button);
+    toolbarAreaLayout->addWidget(rotate0_button);
+    toolbarAreaLayout->addWidget(rotate1_button);
     toolbarAreaLayout->addStretch();
 
     // Devices background
     LayeredSvgDisplay *devicesBackground = new LayeredSvgDisplay(":/assets/devicesBackground.svg", this);
     devicesBackground->setFixedWidth(550);
     devicesBackground->setMinimumHeight(550);
+    devicesBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     std::vector<LayeredSvgDisplay::Layer> devicesBackgroundSvgs = {
         { Theme::background.darker(140), QPointF(-100, 0), 1.00 },
@@ -98,6 +100,7 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sd
     LayeredSvgDisplay *connectedDeviceBackground = new LayeredSvgDisplay(":/assets/connectedDeviceBackground.svg", this);
     connectedDeviceBackground->setFixedWidth(550);
     connectedDeviceBackground->setMinimumHeight(550);
+    connectedDeviceBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     std::vector<LayeredSvgDisplay::Layer> connectedDeviceBackgroundSvgs = {
         { Theme::background.darker(140), QPointF(0, 120), 1.00 },
@@ -107,9 +110,8 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sd
     connectedDeviceBackground->setLayers(connectedDeviceBackgroundSvgs);
 
     auto* connectedDevice = new ConnectedDeviceView(dot_matrix_manager, this);
-    connectedDevice->setFixedWidth(350);
-    connectedDevice->setFixedHeight(130);
-    connectedDevice->setContentsMargins(20, 0, 0, 0);
+    connectedDevice->setFixedWidth(400);
+    connectedDevice->setContentsMargins(20, 0, 0, 50);
     connectedDevice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     connectedDevice->setVisible(false);
 
@@ -117,6 +119,7 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sd
     LayeredSvgDisplay *toolbarBackground = new LayeredSvgDisplay(":/assets/toolsBackground.svg", this);
     toolbarBackground->setFixedWidth(580);
     toolbarBackground->setMinimumHeight(1080);
+    toolbarBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     std::vector<LayeredSvgDisplay::Layer> toolbarBackgroundSvgs = {
         { Theme::background.darker(140), QPointF(0, 0), 1.20 },
@@ -139,22 +142,22 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(std::shared_ptr(sd
     layout->addWidget(connectedDeviceBackground, 1, 0, Qt::AlignLeft | Qt::AlignBottom);
     layout->addWidget(connectedDevice, 1, 0, Qt::AlignLeft | Qt::AlignBottom);
     layout->addWidget(connectionArea, 0, 0, Qt::AlignLeft | Qt::AlignTop);
-    layout->addWidget(pixelGridView, 0, 1, 2, 1);
+    layout->addWidget(pixel_grid_view, 0, 1, 2, 1);
     layout->addWidget(toolbarArea, 0, 2, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
     setLayout(layout);
 
-    connect(scanButton, &QPushButton::clicked, this, &AppWindow::onScanButtonClicked);
+    connect(scan_button, &QPushButton::clicked, this, &AppWindow::onScanButtonClicked);
     connect(dot_matrix_manager, &DotMatrixManager::isScanningChanged, this, [this](bool scanning) {
-        scanButton->setEnabled(!scanning);
+        scan_button->setEnabled(!scanning);
     });
-    connect(rotate0Button, &QPushButton::clicked, this, &AppWindow::onRotate0ButtonClicked);
-    connect(rotate1Button, &QPushButton::clicked, this, &AppWindow::onRotate1ButtonClicked);
+    connect(rotate0_button, &QPushButton::clicked, this, &AppWindow::onRotate0ButtonClicked);
+    connect(rotate1_button, &QPushButton::clicked, this, &AppWindow::onRotate1ButtonClicked);
 
-    connect(colorButton,   &QPushButton::clicked, this, &AppWindow::onPickColorButtonClicked);
-    connect(clearButton,   &QPushButton::clicked, this, &AppWindow::onClearButtonClicked);
+    connect(color_button,   &QPushButton::clicked, this, &AppWindow::onPickColorButtonClicked);
+    connect(clear_button,   &QPushButton::clicked, this, &AppWindow::onClearButtonClicked);
 
-    connect(pixelGridModel, &PixelGridModel::pixelChanged, dot_matrix_manager, &DotMatrixManager::setPixel);
-    connect(pixelGridModel, &PixelGridModel::cleared, dot_matrix_manager, &DotMatrixManager::setDrawingMode);
+    connect(pixel_grid_model, &PixelGridModel::pixelChanged, dot_matrix_manager, &DotMatrixManager::setPixel);
+    connect(pixel_grid_model, &PixelGridModel::cleared, dot_matrix_manager, &DotMatrixManager::setDrawingMode);
 
     setWindowTitle("Chinese DotMatrix");
     resize(350, 500);
@@ -165,20 +168,21 @@ void AppWindow::onRotate0ButtonClicked() { dot_matrix_manager->setRotate180(0); 
 void AppWindow::onRotate1ButtonClicked() { dot_matrix_manager->setRotate180(1); }
 
 void AppWindow::onScanButtonClicked() {
+    dot_matrix_manager->clearDiscoveredDevices();
     dot_matrix_manager->startScan();
 }
 
 void AppWindow::onPickColorButtonClicked() {
-    QColor picked = QColorDialog::getColor(pixelGridModel->primaryColor(), this, "Paint color");
+    QColor picked = QColorDialog::getColor(pixel_grid_model->primaryColor(), this, "Paint color");
     if (!picked.isValid()) return;
-    pixelGridModel->setPrimaryColor(picked);
+    pixel_grid_model->setPrimaryColor(picked);
     updateColorButton(picked);
 }
 
 void AppWindow::onClearButtonClicked() {
-    pixelGridModel->clear();
+    pixel_grid_model->clear();
 }
 
 void AppWindow::updateColorButton(const QColor& c) {
-    colorButton->setStyleSheet(QString("background-color: %1; border: 2px solid #555;").arg(c.name()));
+    color_button->setStyleSheet(QString("background-color: %1; border: 2px solid #555;").arg(c.name()));
 }

@@ -1,7 +1,10 @@
 #include "DotMatrix.hpp"
+#include "BluezDevice.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <sdbus-c++/Message.h>
 #include <sdbus-c++/Types.h>
 #include <string_view>
@@ -23,12 +26,28 @@ std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnecti
 
     // Return saved devices
     ManagedObjects objects;
+    std::vector<bluez::BluezDevice> discovered_devices {};
     root->callMethod("GetManagedObjects")
          .onInterface(OBJECT_MANAGER_IFACE)
          .storeResultsTo(objects);
     for (const auto& object : objects) {
-         if (!object.second.contains(DEVICE_IFACE)) continue;
-         callback(bluez::BluezDevice(object.first, object.second.at(DEVICE_IFACE)));
+        if (!object.second.contains(DEVICE_IFACE)) continue;
+
+        auto device = bluez::BluezDevice(object.first, object.second.at(DEVICE_IFACE));
+
+        auto manufacturer_data = device.getManufacturerData();
+        bool matches_expected_data = false;
+        for (const auto& [company_id, data] : manufacturer_data.value_or(std::map<std::uint16_t, sdbus::Variant>{})) {
+            auto payload = data.get<std::vector<std::uint8_t>>();
+            if (std::equal(PAYLOAD.begin(), PAYLOAD.end(), payload.begin())) {
+                matches_expected_data = true;
+                break;
+            }
+        }
+        if (!matches_expected_data) { continue; }
+
+        discovered_devices.push_back(device);
+        callback(device);
     }
     objects.clear();
 
@@ -38,12 +57,25 @@ std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnecti
     // Retrieve devices as they are found
     root->uponSignal("InterfacesAdded")
         .onInterface(OBJECT_MANAGER_IFACE)
-        .call([&callback](InterfacesAddedSignal signal) {
-            if (!std::get<1>(signal).contains(DEVICE_IFACE)) return;
-            callback(bluez::BluezDevice(std::get<0>(signal), std::get<1>(signal).at(DEVICE_IFACE)));
+        .call([&](InterfacesAddedSignal signal) {
+            if (!std::get<1>(signal).contains(DEVICE_IFACE)) { return; }
+            auto device = bluez::BluezDevice(std::get<0>(signal), std::get<1>(signal).at(DEVICE_IFACE));
+
+            auto manufacturer_data = device.getManufacturerData();
+            bool matches_expected_data = false;
+            for (const auto& [company_id, data] : manufacturer_data.value_or(std::map<std::uint16_t, sdbus::Variant>{})) {
+                auto payload = data.get<std::vector<std::uint8_t>>();
+                if (std::equal(PAYLOAD.begin(), PAYLOAD.end(), payload.begin())) {
+                    matches_expected_data = true;
+                    break;
+                }
+            }
+            if (!matches_expected_data) { return; }
+
+            discovered_devices.push_back(device);
+            callback(device);
         });
     root->finishRegistration();
-    conn->enterEventLoopAsync();
 
     std::this_thread::sleep_for(duration);
     adapter->callMethod("StopDiscovery")
@@ -57,14 +89,12 @@ std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnecti
         return !object.second.contains(DEVICE_IFACE);
     });
 
-    conn->leaveEventLoop();
-    // TODO: return all discovered devices
-    return {};
+    return discovered_devices;
 }
 
 DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath device_path) : DotMatrix(bluez::BluezDeviceProxy(conn, device_path)) {};
 DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device) : DotMatrix(bluez::BluezDeviceProxy(conn, device)) {};
-DotMatrix::DotMatrix(bluez::BluezDeviceProxy device) : conn(device.conn), device(device) {};
+DotMatrix::DotMatrix(bluez::BluezDeviceProxy device) : conn(device.conn), device(std::move(device)) {};
 
 std::string DotMatrix::getObjectPath() const {
     return device.getObjectPath();
@@ -84,6 +114,14 @@ std::optional<std::string> DotMatrix::getName() const {
 
 std::string DotMatrix::getAlias() const {
     return device.getAlias();
+}
+
+bool DotMatrix::getConnected() const {
+    return device.getConnected();
+}
+
+std::optional<std::vector<std::string>> DotMatrix::getUUIDs() const {
+    return device.getUUIDs();
 }
 
 std::optional<std::map<std::uint16_t, sdbus::Variant>> DotMatrix::getManufacturerData() const {

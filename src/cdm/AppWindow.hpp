@@ -30,17 +30,17 @@ private:
     std::shared_ptr<sdbus::IConnection> conn;
     DotMatrixManager* dot_matrix_manager;
 
-    DevicesModel* devicesModel;
-    PixelGridModel* pixelGridModel;
+    DevicesModel* devices_model;
+    PixelGridModel* pixel_grid_model;
 
-    DevicesView* devicesView;
-    PixelGridView* pixelGridView;
+    DevicesView* devices_view;
+    PixelGridView* pixel_grid_view;
 
-    QPushButton* scanButton;
-    QPushButton* rotate0Button;
-    QPushButton* rotate1Button;
-    QPushButton* colorButton;
-    QPushButton* clearButton;
+    QPushButton* scan_button;
+    QPushButton* rotate0_button;
+    QPushButton* rotate1_button;
+    QPushButton* color_button;
+    QPushButton* clear_button;
 
     void updateColorButton(const QColor& c);
 };
