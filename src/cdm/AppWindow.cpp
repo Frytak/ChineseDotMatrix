@@ -84,10 +84,14 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(DBusConnectionMana
     toolbarAreaLayout->addStretch();
 
     // Devices background
-    LayeredSvgDisplay *devicesBackground = new LayeredSvgDisplay(":/assets/devicesBackground.svg", this);
-    devicesBackground->setFixedWidth(550);
-    devicesBackground->setMinimumHeight(550);
+    //LayeredSvgDisplay *devicesBackground = new LayeredSvgDisplay(":/assets/devicesBackground.svg", this);
+    //devicesBackground->setFixedWidth(550);
+    //devicesBackground->setMinimumHeight(550);
+    //devicesBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
+    devicesBackground = new LayeredSvgDisplay(":/assets/devicesBackground.svg", this);
+    devicesBackground->setFixedSize(550, 550);
     devicesBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
+    devicesBackground->lower();
 
     std::vector<LayeredSvgDisplay::Layer> devicesBackgroundSvgs = {
         { Theme::background.darker(140), QPointF(-100, 0), 1.00 },
@@ -97,10 +101,14 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(DBusConnectionMana
     devicesBackground->setLayers(devicesBackgroundSvgs);
 
     // Connected device background
-    LayeredSvgDisplay *connectedDeviceBackground = new LayeredSvgDisplay(":/assets/connectedDeviceBackground.svg", this);
-    connectedDeviceBackground->setFixedWidth(550);
-    connectedDeviceBackground->setMinimumHeight(550);
+    //LayeredSvgDisplay *connectedDeviceBackground = new LayeredSvgDisplay(":/assets/connectedDeviceBackground.svg", this);
+    //connectedDeviceBackground->setFixedWidth(550);
+    //connectedDeviceBackground->setMinimumHeight(550);
+    //connectedDeviceBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
+    connectedDeviceBackground = new LayeredSvgDisplay(":/assets/connectedDeviceBackground.svg", this);
+    connectedDeviceBackground->setFixedSize(550, 550);
     connectedDeviceBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
+    connectedDeviceBackground->lower();
 
     std::vector<LayeredSvgDisplay::Layer> connectedDeviceBackgroundSvgs = {
         { Theme::background.darker(140), QPointF(0, 120), 1.00 },
@@ -116,10 +124,14 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(DBusConnectionMana
     connectedDevice->setVisible(false);
 
     // Toolbar background
-    LayeredSvgDisplay *toolbarBackground = new LayeredSvgDisplay(":/assets/toolsBackground.svg", this);
-    toolbarBackground->setFixedWidth(580);
-    toolbarBackground->setMinimumHeight(1080);
+    //LayeredSvgDisplay *toolbarBackground = new LayeredSvgDisplay(":/assets/toolsBackground.svg", this);
+    //toolbarBackground->setFixedWidth(580);
+    //toolbarBackground->setMinimumHeight(1080);
+    //toolbarBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
+    toolbarBackground = new LayeredSvgDisplay(":/assets/toolsBackground.svg", this);
+    toolbarBackground->setFixedSize(580, 1080);
     toolbarBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
+    toolbarBackground->lower();
 
     std::vector<LayeredSvgDisplay::Layer> toolbarBackgroundSvgs = {
         { Theme::background.darker(140), QPointF(0, 0), 1.20 },
@@ -137,9 +149,9 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(DBusConnectionMana
     layout->setRowStretch(0, 1);
     layout->setRowStretch(1, 1);
 
-    layout->addWidget(devicesBackground, 0, 0, Qt::AlignLeft | Qt::AlignTop);
-    layout->addWidget(toolbarBackground, 0, 2, Qt::AlignRight | Qt::AlignBottom);
-    layout->addWidget(connectedDeviceBackground, 1, 0, Qt::AlignLeft | Qt::AlignBottom);
+    //layout->addWidget(devicesBackground, 0, 0, Qt::AlignLeft | Qt::AlignTop);
+    //layout->addWidget(toolbarBackground, 0, 2, Qt::AlignRight | Qt::AlignBottom);
+    //layout->addWidget(connectedDeviceBackground, 1, 0, Qt::AlignLeft | Qt::AlignBottom);
     layout->addWidget(connectedDevice, 1, 0, Qt::AlignLeft | Qt::AlignBottom);
     layout->addWidget(connectionArea, 0, 0, Qt::AlignLeft | Qt::AlignTop);
     layout->addWidget(pixel_grid_view, 0, 1, 2, 1);
@@ -147,6 +159,9 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent), conn(DBusConnectionMana
     setLayout(layout);
 
     connect(scan_button, &QPushButton::clicked, this, &AppWindow::onScanButtonClicked);
+    connect(dot_matrix_manager, &DotMatrixManager::connectedDeviceChanged, this, [this](const std::optional<DotMatrix>&) {
+        pixel_grid_model->clear();
+    });
     connect(dot_matrix_manager, &DotMatrixManager::isScanningChanged, this, [this](bool scanning) {
         scan_button->setEnabled(!scanning);
     });
@@ -185,4 +200,23 @@ void AppWindow::onClearButtonClicked() {
 
 void AppWindow::updateColorButton(const QColor& c) {
     color_button->setStyleSheet(QString("background-color: %1; border: 2px solid #555;").arg(c.name()));
+}
+
+void AppWindow::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+
+    // Anchor to Top-Left
+    if (devicesBackground) {
+        devicesBackground->move(0, 0); 
+    }
+
+    // Anchor to Bottom-Left
+    if (connectedDeviceBackground) {
+        connectedDeviceBackground->move(0, this->height() - connectedDeviceBackground->height());
+    }
+
+    // Anchor to Right
+    if (toolbarBackground) {
+        toolbarBackground->move(this->width() - toolbarBackground->width(), 0);
+    }
 }

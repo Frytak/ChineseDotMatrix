@@ -6,6 +6,7 @@ MOC      := moc
 RCC      := rcc
 WARNINGS := -Werror -Wall -Wextra -Wconversion -Wsign-conversion -pedantic-errors
 CXXFLAGS := -std=c++23 -MMD -MP $(WARNINGS)
+PREFIX ?= /usr/local
 
 # Apply specific flags based on build type
 ifeq ($(BUILD_TYPE),release)
@@ -53,7 +54,7 @@ APP_RCC_SRC  := $(APP_QRC:$(APP_DIR)/%.qrc=$(APP_BUILD)/qrc_%.cpp)
 APP_RCC_OBJ  := $(APP_RCC_SRC:.cpp=.o)
 
 # Build Targets
-.PHONY: app clean debug release lib
+.PHONY: app clean debug release lib install
 
 app: $(APP_TARGET)
 
@@ -67,8 +68,10 @@ lib: $(LIB_TARGET)
 
 
 
+#$(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) $(LIB_TARGET)
+#	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) -o $@ -L$(BUILD_DIR) -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)'
 $(APP_TARGET): $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) $(LIB_TARGET)
-	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) -o $@ -L$(BUILD_DIR) -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)'
+	$(CXX) $(CXXFLAGS) $(APP_OBJ) $(APP_MOC_OBJ) $(APP_RCC_OBJ) -o $@ -L$(BUILD_DIR) -lcdm $(LDFLAGS) -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR):$$ORIGIN/../lib'
 
 $(APP_BUILD)/%.o: $(APP_DIR)/%.cpp
 	@mkdir -p $(dir $@)
@@ -96,6 +99,11 @@ $(LIB_TARGET): $(LIB_OBJ)
 $(LIB_BUILD)/%.o: $(LIB_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
+
+install: app lib
+	install -d $(PREFIX)/bin $(PREFIX)/lib
+	install -m 755 $(APP_TARGET) $(PREFIX)/bin/
+	install -m 755 $(LIB_TARGET) $(PREFIX)/lib/
 
 clean:
 	rm -r build $(APP_TARGET)

@@ -12,7 +12,7 @@
 #include <vector>
 
 std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnection> conn, std::function<void (bluez::BluezDevice device)> callback, std::chrono::milliseconds duration) {
-    auto adapter = sdbus::createProxy(*conn, BLUEZ_SERVICE, "/org/bluez/hci0");
+    auto adapter = sdbus::createProxy(*conn, BLUEZ_SERVICE, sdbus::ObjectPath("/org/bluez/hci0"));
 
     // Set a filter for BLE only
     std::map<std::string, sdbus::Variant> filter;
@@ -22,7 +22,7 @@ std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnecti
             .onInterface(ADAPTER_IFACE)
             .withArguments(filter);
 
-    auto root = sdbus::createProxy(*conn, BLUEZ_SERVICE, "/");
+    auto root = sdbus::createProxy(*conn, BLUEZ_SERVICE, sdbus::ObjectPath("/"));
 
     // Return saved devices
     ManagedObjects objects;
@@ -75,7 +75,6 @@ std::vector<bluez::BluezDevice> DotMatrix::scan(std::shared_ptr<sdbus::IConnecti
             discovered_devices.push_back(device);
             callback(device);
         });
-    root->finishRegistration();
 
     std::this_thread::sleep_for(duration);
     adapter->callMethod("StopDiscovery")
@@ -96,7 +95,7 @@ DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, sdbus::ObjectPath
 DotMatrix::DotMatrix(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device) : DotMatrix(bluez::BluezDeviceProxy(conn, device)) {};
 DotMatrix::DotMatrix(bluez::BluezDeviceProxy device) : conn(device.conn), device(std::move(device)) {};
 
-std::string DotMatrix::getObjectPath() const {
+sdbus::ObjectPath DotMatrix::getObjectPath() const {
     return device.getObjectPath();
 }
 

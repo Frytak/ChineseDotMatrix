@@ -5,6 +5,7 @@
 #include <numeric>
 #include <optional>
 #include <sdbus-c++/Error.h>
+#include <sdbus-c++/IConnection.h>
 #include <sdbus-c++/Types.h>
 #include "LoggerInternal.hpp"
 
@@ -74,7 +75,7 @@ namespace bluez {
         }
     }
 
-    std::string BluezDevice::getObjectPath() const { return object_path; }
+    sdbus::ObjectPath BluezDevice::getObjectPath() const { return object_path; }
     std::string BluezDevice::getAddress() const { return address; }
     AddressType BluezDevice::getAddressType() const { return address_type; }
     std::optional<std::string> BluezDevice::getName() const { return name; }
@@ -95,7 +96,6 @@ namespace bluez {
         , connection_state(std::make_shared<ConnectionState>())
     {
         registerConnectionListener();
-        device->finishRegistration();
     }
 
     BluezDeviceProxy::BluezDeviceProxy(std::shared_ptr<sdbus::IConnection> conn, bluez::BluezDevice device) : BluezDeviceProxy(conn, device.getObjectPath()) {}
@@ -123,7 +123,7 @@ namespace bluez {
             return characteristics.find(uuid)->second;
         }
 
-        auto root = sdbus::createProxy(*conn, BLUEZ_SERVICE, "/");
+        auto root = sdbus::createProxy(*conn, BLUEZ_SERVICE, sdbus::ObjectPath("/"));
         ManagedObjects objects;
         root->callMethod("GetManagedObjects")
              .onInterface(OBJECT_MANAGER_IFACE)
@@ -219,6 +219,9 @@ namespace bluez {
     }
 
     void BluezDeviceProxy::write(std::string_view uuid, std::vector<uint8_t> data) {
+        if (!getConnected()) {
+            return;
+        }
         auto characteristic = sdbus::createProxy(*conn, BLUEZ_SERVICE, getCharacteristic(uuid)->getObjectPath());
         std::map<std::string, sdbus::Variant> options;
 
@@ -251,7 +254,7 @@ namespace bluez {
         return data;
     }
 
-    std::string BluezDeviceProxy::getObjectPath() const {
+    sdbus::ObjectPath BluezDeviceProxy::getObjectPath() const {
         return object_path;
     }
 

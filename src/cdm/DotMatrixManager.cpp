@@ -24,6 +24,11 @@ DotMatrixManager::DotMatrixManager(std::shared_ptr<sdbus::IConnection> conn, QOb
             draw_queue_cv.wait(lock, [this]() { return !draw_queue.empty(); });
 
             while (!draw_queue.empty()) {
+                if (!connected_dot_matrix.has_value()) {
+                    draw_queue = {};
+                    break;
+                }
+
                 const auto [x, y, color] = draw_queue.front();
                 draw_queue.pop();
                 lock.unlock();

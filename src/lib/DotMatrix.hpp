@@ -33,7 +33,7 @@ public:
     // Scan for DotMatrix devices
     static std::vector<bluez::BluezDevice> scan(std::shared_ptr<sdbus::IConnection> conn, std::function<void (bluez::BluezDevice device)> callback = [](auto){}, std::chrono::milliseconds duration = std::chrono::seconds(5));
 
-    std::string getObjectPath() const override;
+    sdbus::ObjectPath getObjectPath() const override;
     std::string getAddress() const override;
     bluez::AddressType getAddressType() const override;
     std::optional<std::string> getName() const override;

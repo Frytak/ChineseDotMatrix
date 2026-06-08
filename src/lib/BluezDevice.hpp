@@ -8,12 +8,20 @@
 #include <sdbus-c++/Types.h>
 #include <string>
 
-constexpr auto BLUEZ_SERVICE        = "org.bluez";
-constexpr auto ADAPTER_IFACE        = "org.bluez.Adapter1";
-constexpr auto DEVICE_IFACE         = "org.bluez.Device1";
-constexpr auto GATT_CHAR_IFACE      = "org.bluez.GattCharacteristic1";
-constexpr auto OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager";
-constexpr auto PROPERTIES_IFACE     = "org.freedesktop.DBus.Properties";
+//constexpr auto BLUEZ_SERVICE        = "org.bluez";
+//constexpr auto ADAPTER_IFACE        = "org.bluez.Adapter1";
+//constexpr auto DEVICE_IFACE         = "org.bluez.Device1";
+//constexpr auto GATT_CHAR_IFACE      = "org.bluez.GattCharacteristic1";
+//constexpr auto OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager";
+//constexpr auto PROPERTIES_IFACE     = "org.freedesktop.DBus.Properties";
+
+inline const sdbus::ServiceName   BLUEZ_SERVICE        = sdbus::ServiceName{"org.bluez"};
+
+inline const sdbus::InterfaceName ADAPTER_IFACE        = sdbus::InterfaceName{"org.bluez.Adapter1"};
+inline const sdbus::InterfaceName DEVICE_IFACE         = sdbus::InterfaceName{"org.bluez.Device1"};
+inline const sdbus::InterfaceName GATT_CHAR_IFACE      = sdbus::InterfaceName{"org.bluez.GattCharacteristic1"};
+inline const sdbus::InterfaceName OBJECT_MANAGER_IFACE = sdbus::InterfaceName{"org.freedesktop.DBus.ObjectManager"};
+inline const sdbus::InterfaceName PROPERTIES_IFACE     = sdbus::InterfaceName{"org.freedesktop.DBus.Properties"};
 
 class DotMatrix;
 
@@ -43,7 +51,7 @@ namespace bluez {
     public:
         virtual ~BluezDeviceGetInterface() = default;
 
-        virtual std::string getObjectPath() const = 0;
+        virtual sdbus::ObjectPath getObjectPath() const = 0;
         virtual std::string getAddress() const = 0;
         virtual AddressType getAddressType() const = 0;
         virtual std::optional<std::string> getName() const = 0;
@@ -101,7 +109,7 @@ namespace bluez {
         template <typename T>
         static void validate_property_type(const Properties& properties, std::string property_name, std::string expected_type);
 
-        std::string getObjectPath() const override;
+        sdbus::ObjectPath getObjectPath() const override;
         std::string getAddress() const override;
         AddressType getAddressType() const override;
         std::optional<std::string> getName() const override;
@@ -173,7 +181,7 @@ namespace bluez {
         // Read data from a characteristic by UUID
         std::vector<uint8_t> read(std::string_view uuid);
 
-        std::string getObjectPath() const override;
+        sdbus::ObjectPath getObjectPath() const override;
         std::string getAddress() const override;
         AddressType getAddressType() const override;
         std::optional<std::string> getName() const override;

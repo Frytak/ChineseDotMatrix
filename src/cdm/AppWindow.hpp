@@ -5,6 +5,7 @@
 #include <QListWidget>
 #include <QVBoxLayout>
 #include "DotMatrixManager.hpp"
+#include "LayeredSvgDisplay.hpp"
 #include "Models/DevicesModel.hpp"
 #include "Models/PixelGridModel.hpp"
 #include "Views/DevicesView.hpp"
@@ -25,6 +26,9 @@ private slots:
     void onPickColorButtonClicked();
     void onClearButtonClicked();
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private:
     // D-Bus connection
     std::shared_ptr<sdbus::IConnection> conn;
@@ -41,6 +45,10 @@ private:
     QPushButton* rotate1_button;
     QPushButton* color_button;
     QPushButton* clear_button;
+
+    LayeredSvgDisplay* devicesBackground;
+    LayeredSvgDisplay* connectedDeviceBackground;
+    LayeredSvgDisplay* toolbarBackground;
 
     void updateColorButton(const QColor& c);
 };
